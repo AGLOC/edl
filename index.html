@@ -811,6 +811,52 @@ function buildDossierField() {
   return wrap;
 }
 
+const BIEN_TYPES = [
+  'Maison', 'Appartement', 'Studio', 'Duplex', 'Triplex', 'Loft', 'Villa', 'Chalet',
+  'Chambre (meublée / colocation)', 'Local commercial', 'Local professionnel / Bureau',
+  'Parking / Garage', 'Terrain', 'Immeuble entier'
+];
+
+function buildBienTypeSelector() {
+  const wrap = el('div', { class: 'field' });
+  wrap.appendChild(el('label', { text: 'Type de bien' }));
+  const select = el('select');
+  BIEN_TYPES.forEach(t => {
+    const o = el('option', { text: t }); o.value = t;
+    select.appendChild(o);
+  });
+  const autreOpt = el('option', { text: 'Autre…' }); autreOpt.value = '__autre__';
+  select.appendChild(autreOpt);
+
+  const isKnown = BIEN_TYPES.includes(CURRENT.bienType);
+  select.value = isKnown ? CURRENT.bienType : '__autre__';
+
+  const autreInput = el('input', {
+    class: 'bien-type-autre',
+    attrs: { type: 'text', placeholder: 'Précisez le type de bien' }
+  });
+  autreInput.value = isKnown ? '' : (CURRENT.bienType || '');
+  autreInput.style.display = isKnown ? 'none' : 'block';
+  autreInput.style.marginTop = '6px';
+  autreInput.addEventListener('input', () => { CURRENT.bienType = autreInput.value; markDirty(); });
+
+  select.addEventListener('change', () => {
+    if (select.value === '__autre__') {
+      autreInput.style.display = 'block';
+      autreInput.focus();
+      CURRENT.bienType = autreInput.value || '';
+    } else {
+      autreInput.style.display = 'none';
+      CURRENT.bienType = select.value;
+    }
+    markDirty();
+  });
+
+  wrap.appendChild(select);
+  wrap.appendChild(autreInput);
+  return wrap;
+}
+
 function buildMandataireSelector() {
   const wrap = el('div', { class: 'field field-wide' });
   wrap.appendChild(el('label', { text: 'Mandataire / agence' }));
@@ -967,7 +1013,7 @@ function buildGeneralTab(content) {
   grid.appendChild(field('Technicien', CURRENT.technicien, v => CURRENT.technicien = v));
   grid.appendChild(buildMandataireSelector());
   grid.appendChild(field('Propriétaire', CURRENT.proprietaire, v => CURRENT.proprietaire = v));
-  grid.appendChild(field('Type de bien', CURRENT.bienType, v => CURRENT.bienType = v));
+  grid.appendChild(buildBienTypeSelector());
   grid.appendChild(field('Nombre de pièces', CURRENT.bienPieces, v => CURRENT.bienPieces = v));
   grid.appendChild(field('Adresse du bien', CURRENT.bienAdresse, v => CURRENT.bienAdresse = v, { wide: true }));
   content.appendChild(sectionBox('Informations générales', grid));
