@@ -1,0 +1,15 @@
+{
+  "name": "AGLOC — État des lieux",
+  "short_name": "AGLOC EDL",
+  "description": "Réalisation d'états des lieux d'entrée et de sortie sur le terrain",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ecf7fe",
+  "theme_color": "#131e30",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "icone-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

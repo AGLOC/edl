@@ -1,0 +1,1849 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>AGLOC — État des lieux</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#131e30">
+<link rel="apple-touch-icon" href="icone-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="AGLOC EDL">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
+:root {
+  --navy: #131e30;
+  --navy-light: #1d2c47;
+  --lightblue: #ecf7fe;
+  --gold: #d5a86c;
+  --gold-dark: #b98c4e;
+  --white: #ffffff;
+  --text: #131e30;
+  --subtle: #5a6a7a;
+  --border: #e1e6ec;
+  --red: #b03a2e;
+  --amber: #b7770d;
+  --green: #1a6b3c;
+  --blue: #1d4e89;
+  --orange: #c2410c;
+  --lightgold: #f7eede;
+  --radius: 10px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: #f4f6f9;
+  color: var(--text);
+  font-family: 'Poppins', -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button, input, select, textarea { font-family: inherit; }
+
+#app { min-height: 100vh; padding-bottom: 60px; }
+
+/* ---------- Topbar ---------- */
+.topbar {
+  background: var(--navy);
+  color: var(--white);
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+  flex-wrap: wrap;
+  border-bottom: 3px solid var(--gold);
+}
+.brand { font-size: 20px; font-weight: 700; letter-spacing: 0.5px; }
+.brand-compact { font-size: 16px; }
+.brand-a { color: var(--gold); }
+.brand-sub { font-size: 12px; color: #b7c4d6; margin-left: -4px; }
+.btn-back {
+  background: transparent; border: 1px solid rgba(255,255,255,0.3); color: #fff;
+  padding: 7px 12px; border-radius: 8px; cursor: pointer; font-size: 13px;
+}
+.insp-header-title { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #dfe7f0; flex: 1; min-width: 120px; }
+.tag { padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
+.tag-entree { background: #1a6b3c; color: #fff; }
+.tag-sortie { background: #c2410c; color: #fff; }
+.save-status { font-size: 12px; color: #9fe6b8; margin-left: auto; white-space: nowrap; }
+.save-status.saving { color: var(--gold); }
+
+/* ---------- Tabs ---------- */
+.tabnav {
+  display: flex; gap: 4px; overflow-x: auto; background: var(--navy-light);
+  padding: 0 12px; position: sticky; top: 62px; z-index: 19;
+}
+.tab-btn {
+  background: transparent; border: none; color: #b7c4d6; padding: 12px 14px;
+  font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap;
+  border-bottom: 3px solid transparent;
+}
+.tab-btn.active { color: #fff; border-bottom-color: var(--gold); font-weight: 600; }
+
+/* ---------- Page layout ---------- */
+.page { max-width: 900px; margin: 0 auto; padding: 18px 14px 40px; }
+.section-title { font-size: 16px; margin: 26px 0 12px; color: var(--navy); }
+.empty, .empty-sm { color: var(--subtle); font-size: 14px; text-align: center; padding: 18px; }
+.empty-sm { text-align: left; padding: 4px 0; }
+
+/* ---------- Buttons ---------- */
+.btn {
+  border: none; border-radius: 8px; padding: 10px 16px; font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: transform .05s ease, opacity .15s ease;
+}
+.btn:active { transform: scale(0.97); }
+.btn-primary { background: var(--gold); color: var(--navy); }
+.btn-primary:hover { background: var(--gold-dark); }
+.btn-outline { background: transparent; border: 1.5px solid var(--navy); color: var(--navy); }
+.btn-ghost { background: transparent; color: var(--subtle); }
+.btn-danger { background: transparent; color: var(--red); border: 1.5px solid var(--red); }
+.btn-lg { padding: 14px 20px; font-size: 15px; width: 100%; }
+.btn-sm { padding: 7px 12px; font-size: 12.5px; }
+.btn-icon {
+  background: #fbeae7; color: var(--red); border: none; width: 28px; height: 28px;
+  border-radius: 6px; cursor: pointer; font-size: 13px; flex-shrink: 0;
+}
+
+/* ---------- Home ---------- */
+.home-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+@media (min-width: 620px) { .home-actions { flex-direction: row; } .home-actions .btn { width: auto; flex: 1; } }
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+.insp-card {
+  background: #fff; border-radius: var(--radius); padding: 16px; border: 1px solid var(--border);
+  box-shadow: 0 1px 3px rgba(19,30,48,0.06);
+}
+.insp-card-tag {
+  display: inline-block; font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+  padding: 3px 9px; border-radius: 20px; margin-bottom: 8px; color: #fff;
+}
+.insp-card-title { font-weight: 600; font-size: 15px; color: var(--navy); margin-bottom: 2px; }
+.insp-card-sub { font-size: 13px; color: var(--subtle); margin-bottom: 6px; min-height: 18px; }
+.insp-card-date { font-size: 11.5px; color: #96a2b0; margin-bottom: 12px; }
+.insp-card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ---------- Boxes / sections ---------- */
+.box {
+  background: #fff; border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 16px; margin-bottom: 16px;
+}
+.box-title {
+  font-size: 14px; color: var(--navy); margin: 0 0 12px; font-weight: 600;
+  border-left: 4px solid var(--gold); padding-left: 10px;
+}
+
+/* ---------- Forms ---------- */
+.form-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+@media (min-width: 600px) { .form-grid { grid-template-columns: 1fr 1fr; } }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field-wide { grid-column: 1 / -1; }
+.field label { font-size: 12px; color: var(--subtle); font-weight: 500; }
+.field input, .field textarea {
+  border: 1.5px solid var(--border); border-radius: 8px; padding: 9px 10px; font-size: 14px; color: var(--text);
+  width: 100%; background: #fbfcfe;
+}
+.field input:focus, .field textarea:focus { outline: none; border-color: var(--gold); background: #fff; }
+
+/* ---------- Clés ---------- */
+.cles-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.cle-row { display: grid; grid-template-columns: 60px 1fr 2fr 30px; gap: 8px; align-items: center; }
+.cle-row input {
+  border: 1.5px solid var(--border); border-radius: 7px; padding: 8px; font-size: 13px; width: 100%;
+}
+
+/* ---------- Compteurs ---------- */
+.meter-row {
+  border-bottom: 1px solid var(--border); padding: 12px 0; display: flex; flex-direction: column; gap: 8px;
+}
+.meter-row:last-child { border-bottom: none; }
+.meter-type { font-weight: 600; font-size: 13px; color: var(--navy); }
+.meter-inputs { display: grid; grid-template-columns: 1.2fr 0.8fr 2fr; gap: 8px; }
+.meter-inputs input, .meter-inputs select {
+  border: 1.5px solid var(--border); border-radius: 7px; padding: 8px; font-size: 13px; width: 100%;
+}
+
+/* ---------- Checkbox grid ---------- */
+.checkbox-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (min-width: 560px) { .checkbox-grid { grid-template-columns: 1fr 1fr 1fr; } }
+.check-option { display: flex; align-items: center; gap: 7px; font-size: 13.5px; cursor: pointer; }
+.check-option input { width: 17px; height: 17px; accent-color: var(--gold-dark); cursor: pointer; }
+
+/* ---------- Photos ---------- */
+.photo-widget { margin-top: 4px; }
+.photo-strip { display: flex; gap: 8px; flex-wrap: wrap; }
+.photo-thumb {
+  position: relative; width: 72px; height: 72px; border-radius: 8px; overflow: hidden;
+  border: 1px solid var(--border); background: #eef1f5;
+}
+.photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo-del {
+  position: absolute; top: 2px; right: 2px; background: rgba(19,30,48,0.75); color: #fff;
+  border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 11px; cursor: pointer;
+}
+.photo-add {
+  width: 72px; height: 72px; border: 2px dashed var(--gold); border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--gold-dark);
+  cursor: pointer; text-align: center; font-weight: 600;
+}
+
+/* ---------- Pièces ---------- */
+.add-room-box { background: var(--lightblue); border: none; }
+.add-room-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.add-room-row select, .add-room-row input {
+  border: 1.5px solid var(--border); border-radius: 7px; padding: 9px 10px; font-size: 13.5px;
+}
+.add-room-row input { flex: 1; min-width: 180px; }
+.rooms-wrap { display: flex; flex-direction: column; gap: 16px; }
+.room-card { background: #fff; border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+.room-head { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
+.room-name-input {
+  flex: 1; font-size: 16px; font-weight: 600; color: var(--navy); border: none; border-bottom: 2px solid var(--gold);
+  padding: 4px 2px; background: transparent;
+}
+.room-name-input:focus { outline: none; }
+.quick-criteres { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.chip {
+  background: var(--lightblue); border: 1px solid #cfe6f3; color: var(--navy); border-radius: 20px;
+  padding: 5px 11px; font-size: 12px; cursor: pointer; font-weight: 500;
+}
+.chip:hover { background: #d9f0fc; }
+.lignes-wrap { display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px; }
+
+.ligne-row {
+  border: 1px solid var(--border); border-radius: 9px; padding: 12px; background: #fbfcfe;
+}
+.ligne-top { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.critere-input {
+  flex: 1; border: none; border-bottom: 1.5px solid var(--border); background: transparent;
+  font-size: 14px; font-weight: 600; color: var(--navy); padding: 4px 2px;
+}
+.critere-input:focus { outline: none; border-color: var(--gold); }
+.substrat-input {
+  width: 100%; border: none; border-bottom: 1.5px dashed var(--border); background: transparent;
+  font-size: 12.5px; font-style: italic; color: var(--subtle); padding: 3px 2px; margin-bottom: 8px;
+}
+.substrat-input:focus { outline: none; border-color: var(--gold); }
+.state-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.state-btn {
+  --state-color: #999;
+  border: 1.5px solid var(--state-color); color: var(--state-color); background: #fff;
+  border-radius: 20px; padding: 5px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.state-btn.active { background: var(--state-color); color: #fff; }
+.ligne-row textarea {
+  width: 100%; border: 1.5px solid var(--border); border-radius: 7px; padding: 8px; font-size: 13px;
+  margin-bottom: 8px; resize: vertical; background: #fff;
+}
+.ligne-bottom { margin-bottom: 8px; }
+
+/* ---------- Récap ---------- */
+.radio-row { display: flex; gap: 18px; flex-wrap: wrap; }
+.recap-line {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 0;
+  border-bottom: 1px solid var(--border); font-size: 13px;
+}
+.recap-line:last-child { border-bottom: none; }
+.recap-room { color: var(--subtle); font-size: 11.5px; text-transform: uppercase; letter-spacing: .3px; }
+.recap-critere { font-weight: 600; color: var(--navy); }
+.recap-badge { color: #fff; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 20px; }
+.recap-comment { color: var(--subtle); font-style: italic; flex-basis: 100%; }
+
+/* ---------- Signatures ---------- */
+.sig-grid { display: flex; flex-wrap: wrap; gap: 20px; }
+.sig-box { display: flex; flex-direction: column; gap: 6px; }
+.sig-label { font-size: 12.5px; font-weight: 600; color: var(--navy); }
+.sig-canvas {
+  border: 1.5px dashed var(--gold); border-radius: 8px; background: #fff; touch-action: none;
+  width: 320px; max-width: 100%; height: 150px;
+}
+.pdf-btn { margin-top: 10px; }
+
+/* ---------- Navigation secondaire ---------- */
+.nav-right { margin-left: auto; }
+
+/* ---------- Dossier auto ---------- */
+.dossier-row { display: flex; gap: 6px; }
+.dossier-row input { flex: 1; }
+
+/* ---------- Sélecteur mandataire ---------- */
+.mandataire-info {
+  margin-top: 6px; background: var(--lightblue); border-radius: 8px; padding: 8px 10px;
+  font-size: 12.5px; color: var(--navy); display: flex; flex-direction: column; gap: 2px;
+}
+
+/* ---------- Modale ---------- */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(19,30,48,0.55); display: flex;
+  align-items: center; justify-content: center; z-index: 100; padding: 16px;
+}
+.modal-box {
+  background: #fff; border-radius: var(--radius); padding: 20px; width: 100%; max-width: 480px;
+  max-height: 90vh; overflow-y: auto; box-shadow: 0 10px 40px rgba(0,0,0,0.25);
+}
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div style="padding:60px 20px;text-align:center;color:#5a6a7a;font-family:sans-serif;">Chargement de l'application…</div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+/* ==========================================================================
+   AGLOC — Etat des lieux — logique applicative
+   ========================================================================== */
+
+/* ---------- Constantes charte / métier ---------- */
+const STATES = [
+  { code: 'NEUF', label: 'Neuf',        color: '#1a6b3c' },
+  { code: 'BE',   label: 'Bon état',    color: '#1d4e89' },
+  { code: 'EM',   label: 'État moyen',  color: '#b7770d' },
+  { code: 'ME',   label: 'Mauvais état',color: '#c2410c' },
+  { code: 'DEG',  label: 'Dégradé',     color: '#b03a2e' },
+];
+const STATE_MAP = Object.fromEntries(STATES.map(s => [s.code, s]));
+
+const CHAUFFAGE_OPTIONS = ['Convecteur élect.', 'Chaudière fioul', 'Chaudière ind. gaz', 'Radiateur gaz', 'Autre PAC', 'Collectif'];
+const ECS_OPTIONS = ['Cumulus élect.', 'Chauffe-eau élec.', 'Chaudière ind. gaz', 'Chauffe-eau gaz', 'Autre thermodynamique', 'Collectif'];
+
+const QUICK_CRITERES = ['Sol', 'Plinthes', 'Mur', 'Plafond', 'Porte', 'Huisserie', 'Poignée', 'Serrure',
+  'Fenêtre(s)', 'Volets', 'Chauffage', 'Ventilation', 'Éclairage', 'Interrupteur(s)', 'Prise(s)'];
+
+const ROOM_PRESETS = {
+  'Pièce vierge': [],
+  'Séjour / Cuisine': ['Vue de la pièce et nettoyage', 'Sol', 'Plinthes', 'Mur', 'Plafond', 'Porte(s)', 'Huisserie', 'Fenêtre(s) / Porte-fenêtre', 'Volets', 'Chauffage', 'Ventilation', 'Éclairage', 'Prise(s)', 'Évier', 'Plaque de cuisson', 'Hotte', 'Four', 'Plan de travail', 'Crédence'],
+  'Chambre': ['Vue de la pièce et nettoyage', 'Sol', 'Plinthes', 'Mur', 'Plafond', 'Porte(s)', 'Huisserie', 'Serrure', 'Fenêtre(s)', 'Chauffage', 'Ventilation', 'Éclairage', 'Prise(s)', 'Placard'],
+  'Salle d\'eau / Salle de bain': ['Vue de la pièce et nettoyage', 'Sol', 'Mur', 'Plafond', 'Porte(s)', 'Fenêtre(s)', 'Chauffage', 'Ventilation', 'Éclairage', 'Miroir', 'Douche / Baignoire', 'Robinetterie', 'Joints', 'Lavabo', 'Meuble sous lavabo'],
+  'WC': ['Vue de la pièce et nettoyage', 'Sol', 'Plinthes', 'Mur', 'Plafond', 'Porte(s)', 'Ventilation', 'Éclairage', 'WC - Cuvette', 'WC - Abattant', 'WC - Mécanisme chasse d\'eau'],
+  'Buanderie': ['Vue de la pièce et nettoyage', 'Sol', 'Plinthes', 'Mur', 'Plafond', 'Ballon d\'eau chaude', 'Ventilation', 'Éclairage', 'Prise(s)', 'Sécurité - Détecteur de fumée', 'Évacuation machine à laver'],
+  'Dégagement / Couloir': ['Vue de la pièce et nettoyage', 'Sol', 'Plinthes', 'Mur', 'Plafond', 'Porte(s)', 'Éclairage', 'Interrupteur(s)', 'Prise(s)', 'Sécurité - Détecteur de fumée'],
+  'Garage / Cave': ['Vue de la pièce et nettoyage', 'Sol', 'Mur', 'Plafond', 'Porte', 'Éclairage', 'Compteur électrique'],
+  'Terrain - Extérieur avant': ['Vue de la pièce et nettoyage', 'Sol', 'Mur', 'Carport / Portail', 'Boîte aux lettres', 'Poubelle'],
+  'Terrain - Extérieur arrière': ['Vue de la pièce et nettoyage', 'Sol', 'Terrasse', 'Mur / Clôture', 'Abri de jardin', 'PAC'],
+};
+
+const METER_TYPES = ['Électricité HC Saison Basse', 'Électricité HP Saison Basse', 'Électricité HC Saison Haute',
+  'Électricité HP Saison Haute', 'Électricité PRM', 'Eau froide', 'Eau chaude', 'Gaz', 'Fibre'];
+
+/* ---------- Utilitaires ---------- */
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+
+function el(tag, opts) {
+  opts = opts || {};
+  const node = document.createElement(tag);
+  if (opts.class) node.className = opts.class;
+  if (opts.text !== undefined) node.textContent = opts.text;
+  if (opts.html !== undefined) node.innerHTML = opts.html;
+  if (opts.attrs) Object.entries(opts.attrs).forEach(([k, v]) => node.setAttribute(k, v));
+  if (opts.on) Object.entries(opts.on).forEach(([evt, fn]) => node.addEventListener(evt, fn));
+  if (opts.children) opts.children.forEach(c => c && node.appendChild(c));
+  return node;
+}
+
+function debounce(fn, wait) {
+  let t;
+  return function (...args) {
+    clearTimeout(t);
+    t = setTimeout(() => fn.apply(this, args), wait);
+  };
+}
+
+function fmtDate(d) {
+  const dt = d ? new Date(d) : new Date();
+  return dt.toLocaleDateString('fr-FR');
+}
+
+function compressImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('lecture impossible'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('image invalide'));
+      img.onload = () => {
+        const maxDim = 1280;
+        let w = img.width, h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+          else { w = Math.round(w * maxDim / h); h = maxDim; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.62));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ---------- Polyfill de stockage (autonome hors Claude) ----------
+   Si l'appli tourne dans l'environnement Claude, window.storage existe déjà.
+   Sinon (GitHub Pages, ouverture locale, PWA installée...), on simule la
+   même API (get/set/delete) avec IndexedDB, adapté au volume des photos. */
+(function () {
+  if (window.storage && typeof window.storage.get === 'function') return; // déjà présent (Claude)
+
+  const DB_NAME = 'aglocEdlDB';
+  const STORE = 'kv';
+  let dbPromise = null;
+
+  function openDB() {
+    if (dbPromise) return dbPromise;
+    dbPromise = new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => {
+        req.result.createObjectStore(STORE);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return dbPromise;
+  }
+
+  async function idbGet(key) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readonly');
+      const req = tx.objectStore(STORE).get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function idbSet(key, value) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).put(value, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  async function idbDelete(key) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).delete(key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  window.storage = {
+    async get(key /*, shared */) {
+      const value = await idbGet(key);
+      if (value === undefined) return null;
+      return { key, value, shared: false };
+    },
+    async set(key, value /*, shared */) {
+      await idbSet(key, value);
+      return { key, value, shared: false };
+    },
+    async delete(key /*, shared */) {
+      await idbDelete(key);
+      return { key, deleted: true, shared: false };
+    },
+    async list(prefix /*, shared */) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, 'readonly');
+        const req = tx.objectStore(STORE).getAllKeys();
+        req.onsuccess = () => {
+          let keys = req.result;
+          if (prefix) keys = keys.filter(k => String(k).startsWith(prefix));
+          resolve({ keys, prefix, shared: false });
+        };
+        req.onerror = () => reject(req.error);
+      });
+    }
+  };
+})();
+
+/* ---------- Numérotation automatique des dossiers ---------- */
+async function nextDossierNumber() {
+  const year = new Date().getFullYear();
+  const key = 'edl:counter:' + year;
+  let seq = 1;
+  try {
+    const r = await window.storage.get(key, false);
+    seq = r ? (parseInt(r.value, 10) + 1) : 1;
+  } catch (e) { seq = 1; }
+  try { await window.storage.set(key, String(seq), false); } catch (e) {}
+  return 'AGLOC-' + year + '-' + String(seq).padStart(4, '0');
+}
+
+/* ---------- Stockage ---------- */
+const Store = {
+  async getMandataires() {
+    try {
+      const r = await window.storage.get('mandataires:list', false);
+      return r ? JSON.parse(r.value) : [];
+    } catch (e) { return []; }
+  },
+  async saveMandataires(list) {
+    await window.storage.set('mandataires:list', JSON.stringify(list), false);
+  },
+  async getIndex() {
+    try {
+      const r = await window.storage.get('edl:index', false);
+      return r ? JSON.parse(r.value) : [];
+    } catch (e) { return []; }
+  },
+  async setIndex(list) {
+    await window.storage.set('edl:index', JSON.stringify(list), false);
+  },
+  async getInspection(id) {
+    try {
+      const r = await window.storage.get('edl:data:' + id, false);
+      return r ? JSON.parse(r.value) : null;
+    } catch (e) { return null; }
+  },
+  async saveInspection(insp) {
+    insp.updatedAt = new Date().toISOString();
+    await window.storage.set('edl:data:' + insp.id, JSON.stringify(insp), false);
+    const idx = await this.getIndex();
+    const i = idx.findIndex(x => x.id === insp.id);
+    const entry = {
+      id: insp.id, type: insp.type, dossier: insp.dossier,
+      adresse: insp.bienAdresse, updatedAt: insp.updatedAt
+    };
+    if (i >= 0) idx[i] = entry; else idx.unshift(entry);
+    await this.setIndex(idx);
+  },
+  async deleteInspection(id) {
+    const insp = await this.getInspection(id);
+    if (insp) {
+      const photoIds = collectPhotoIds(insp);
+      for (const pid of photoIds) {
+        try { await window.storage.delete('photo:' + pid, false); } catch (e) {}
+      }
+    }
+    try { await window.storage.delete('edl:data:' + id, false); } catch (e) {}
+    const idx = await this.getIndex();
+    await this.setIndex(idx.filter(x => x.id !== id));
+  },
+  async getPhoto(photoId) {
+    try {
+      const r = await window.storage.get('photo:' + photoId, false);
+      return r ? r.value : null;
+    } catch (e) { return null; }
+  },
+  async setPhoto(photoId, dataUrl) {
+    await window.storage.set('photo:' + photoId, dataUrl, false);
+  },
+  async deletePhoto(photoId) {
+    try { await window.storage.delete('photo:' + photoId, false); } catch (e) {}
+  }
+};
+
+function collectPhotoIds(insp) {
+  const ids = [];
+  (insp.compteurs || []).forEach(m => (m.photos || []).forEach(p => ids.push(p)));
+  (insp.pieces || []).forEach(room => (room.lignes || []).forEach(l => (l.photos || []).forEach(p => ids.push(p))));
+  return ids;
+}
+
+/* ---------- Modèle ---------- */
+function newInspection(type) {
+  const now = new Date().toISOString();
+  return {
+    id: uid(),
+    type: type, // 'entree' | 'sortie'
+    dossier: '',
+    technicien: '',
+    mandataire: null, // { id, nom, agence, telephone, email, adresse }
+    proprietaire: '',
+    bienType: 'Maison',
+    bienPieces: '',
+    bienAdresse: '',
+    entrantNom: '', entrantDate: '',
+    sortantNom: '', sortantDate: '',
+    fournisseurTel: '', fournisseurGaz: '', fournisseurElec: '',
+    cles: [{ nombre: '2', numero: '', obs: 'Porte d\'entrée' }],
+    chauffage: [], ecs: [],
+    entretienGaz: '',
+    compteurs: METER_TYPES.map(t => ({ type: t, releve: '', date: fmtDate(now), obs: '', coupe: 'NON', photos: [] })),
+    pieces: [],
+    proprete: 'bon',
+    signatures: { sortant: null, entrant: null, proprietaire: null },
+    createdAt: now, updatedAt: now
+  };
+}
+
+function newRoom(name, criteres) {
+  return {
+    id: uid(),
+    nom: name,
+    lignes: (criteres || []).map(c => newLigne(c))
+  };
+}
+
+function newLigne(critere) {
+  return { id: uid(), critere: critere || '', substrat: '', etat: '', commentaire: '', nettoyage: false, photos: [] };
+}
+
+/* Sanity check point for node --check: end of file */
+/* ==========================================================================
+   AGLOC — Etat des lieux — interface
+   ========================================================================== */
+
+const App = document.getElementById('app');
+let CURRENT = null;           // inspection en cours d'édition
+let SAVE_STATUS = null;       // ref DOM au badge de sauvegarde
+let MANDATAIRES_CACHE = [];   // cache des mandataires/agences enregistrés
+
+async function refreshMandataires() {
+  MANDATAIRES_CACHE = await Store.getMandataires();
+}
+
+function simpleField(label, value, onInput, opts) {
+  opts = opts || {};
+  const wrap = el('div', { class: 'field' + (opts.wide ? ' field-wide' : '') });
+  wrap.appendChild(el('label', { text: label }));
+  const input = el('input', { attrs: { type: opts.type || 'text' } });
+  input.value = value || '';
+  input.addEventListener('input', () => onInput(input.value));
+  wrap.appendChild(input);
+  return wrap;
+}
+const scheduleSave = debounce(async () => {
+  if (!CURRENT) return;
+  await Store.saveInspection(CURRENT);
+  if (SAVE_STATUS) { SAVE_STATUS.textContent = 'Enregistré ✓'; SAVE_STATUS.classList.remove('saving'); }
+}, 500);
+
+function markDirty() {
+  if (SAVE_STATUS) { SAVE_STATUS.textContent = 'Enregistrement…'; SAVE_STATUS.classList.add('saving'); }
+  scheduleSave();
+}
+
+/* ---------------------------- ECRAN ACCUEIL ---------------------------- */
+
+async function renderHome() {
+  CURRENT = null;
+  const list = await Store.getIndex();
+  App.innerHTML = '';
+
+  const header = el('div', { class: 'topbar' }, );
+  header.appendChild(el('div', { class: 'brand', html: '<span class="brand-a">AG</span>LOC' }));
+  header.appendChild(el('div', { class: 'brand-sub', text: 'États des lieux' }));
+  header.appendChild(el('button', { class: 'btn-back nav-right', text: '🗂️ Mandataires & agences', on: { click: renderMandataires } }));
+  App.appendChild(header);
+
+  const wrap = el('div', { class: 'page' });
+
+  const actions = el('div', { class: 'home-actions' });
+  actions.appendChild(el('button', {
+    class: 'btn btn-primary btn-lg', text: '+ Nouvel état des lieux d\'entrée',
+    on: { click: () => openNewInspectionForm('entree') }
+  }));
+  actions.appendChild(el('button', {
+    class: 'btn btn-outline btn-lg', text: '+ Nouvel état des lieux de sortie',
+    on: { click: () => openNewInspectionForm('sortie') }
+  }));
+  wrap.appendChild(actions);
+
+  wrap.appendChild(el('h2', { class: 'section-title', text: 'États des lieux en cours' }));
+
+  if (!list.length) {
+    wrap.appendChild(el('p', { class: 'empty', text: 'Aucun état des lieux pour le moment. Créez-en un ci-dessus pour commencer votre visite.' }));
+  } else {
+    const grid = el('div', { class: 'card-grid' });
+    list.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+    list.forEach(entry => grid.appendChild(buildInspectionCard(entry)));
+    wrap.appendChild(grid);
+  }
+
+  App.appendChild(wrap);
+}
+
+function buildInspectionCard(entry) {
+  const typeLabel = entry.type === 'entree' ? 'Entrée' : 'Sortie';
+  const card = el('div', { class: 'insp-card' });
+  card.appendChild(el('div', { class: 'insp-card-tag tag-' + entry.type, text: typeLabel }));
+  card.appendChild(el('div', { class: 'insp-card-title', text: entry.dossier || 'Sans nom de dossier' }));
+  card.appendChild(el('div', { class: 'insp-card-sub', text: entry.adresse || 'Adresse non renseignée' }));
+  card.appendChild(el('div', { class: 'insp-card-date', text: 'Modifié le ' + fmtDate(entry.updatedAt) }));
+  const row = el('div', { class: 'insp-card-actions' });
+  row.appendChild(el('button', { class: 'btn btn-primary btn-sm', text: 'Ouvrir', on: { click: () => openInspection(entry.id) } }));
+  row.appendChild(el('button', { class: 'btn btn-ghost btn-sm', text: 'Dupliquer', on: { click: () => duplicateInspection(entry.id) } }));
+  row.appendChild(el('button', { class: 'btn btn-danger btn-sm', text: 'Supprimer', on: { click: () => deleteInspectionConfirm(entry.id) } }));
+  card.appendChild(row);
+  return card;
+}
+
+async function deleteInspectionConfirm(id) {
+  if (!confirm('Supprimer définitivement cet état des lieux et ses photos ?')) return;
+  await Store.deleteInspection(id);
+  renderHome();
+}
+
+async function duplicateInspection(id) {
+  const src = await Store.getInspection(id);
+  if (!src) return;
+  const otherType = src.type === 'entree' ? 'sortie' : 'entree';
+  const copy = newInspection(otherType);
+  copy.dossier = await nextDossierNumber();
+  copy.mandataire = src.mandataire ? { ...src.mandataire } : null;
+  copy.proprietaire = src.proprietaire;
+  copy.bienType = src.bienType;
+  copy.bienPieces = src.bienPieces;
+  copy.bienAdresse = src.bienAdresse;
+  copy.fournisseurTel = src.fournisseurTel;
+  copy.fournisseurGaz = src.fournisseurGaz;
+  copy.fournisseurElec = src.fournisseurElec;
+  copy.cles = JSON.parse(JSON.stringify(src.cles || []));
+  copy.chauffage = [...(src.chauffage || [])];
+  copy.ecs = [...(src.ecs || [])];
+  copy.pieces = (src.pieces || []).map(room => ({
+    id: uid(), nom: room.nom,
+    lignes: (room.lignes || []).map(l => newLigne(l.critere))
+  }));
+  await Store.saveInspection(copy);
+  openInspection(copy.id);
+}
+
+async function openNewInspectionForm(type) {
+  const insp = newInspection(type);
+  insp.dossier = await nextDossierNumber();
+  CURRENT = insp;
+  await Store.saveInspection(insp);
+  renderEditor('general');
+}
+
+async function openInspection(id) {
+  const insp = await Store.getInspection(id);
+  if (!insp) { renderHome(); return; }
+  CURRENT = insp;
+  renderEditor('general');
+}
+
+/* ---------------------------- EDITEUR ---------------------------- */
+
+const TABS = [
+  { key: 'general', label: 'Général' },
+  { key: 'cles', label: 'Clés & compteurs' },
+  { key: 'chauffage', label: 'Chauffage' },
+  { key: 'pieces', label: 'Pièces' },
+  { key: 'recap', label: 'Récap & signatures' },
+];
+
+async function renderEditor(activeTab) {
+  await refreshMandataires();
+  App.innerHTML = '';
+  const typeLabel = CURRENT.type === 'entree' ? 'Entrant' : 'Sortant';
+
+  const header = el('div', { class: 'topbar' });
+  header.appendChild(el('button', { class: 'btn-back', text: '← Accueil', on: { click: renderHome } }));
+  header.appendChild(el('div', { class: 'brand brand-compact', html: '<span class="brand-a">AG</span>LOC' }));
+  const titleBox = el('div', { class: 'insp-header-title' });
+  titleBox.appendChild(el('span', { class: 'tag tag-' + CURRENT.type, text: typeLabel }));
+  titleBox.appendChild(el('span', { text: CURRENT.dossier || 'Nouveau dossier' }));
+  header.appendChild(titleBox);
+  SAVE_STATUS = el('div', { class: 'save-status', text: 'Enregistré ✓' });
+  header.appendChild(SAVE_STATUS);
+  App.appendChild(header);
+
+  const tabnav = el('div', { class: 'tabnav' });
+  TABS.forEach(t => {
+    tabnav.appendChild(el('button', {
+      class: 'tab-btn' + (t.key === activeTab ? ' active' : ''),
+      text: t.label,
+      on: { click: () => renderEditor(t.key) }
+    }));
+  });
+  App.appendChild(tabnav);
+
+  const content = el('div', { class: 'page' });
+  App.appendChild(content);
+
+  if (activeTab === 'general') buildGeneralTab(content);
+  else if (activeTab === 'cles') buildClesTab(content);
+  else if (activeTab === 'chauffage') buildChauffageTab(content);
+  else if (activeTab === 'pieces') buildPiecesTab(content);
+  else if (activeTab === 'recap') buildRecapTab(content);
+}
+
+function field(label, value, onInput, opts) {
+  opts = opts || {};
+  const wrap = el('div', { class: 'field' + (opts.wide ? ' field-wide' : '') });
+  wrap.appendChild(el('label', { text: label }));
+  const input = el(opts.textarea ? 'textarea' : 'input', {
+    attrs: opts.textarea ? { rows: opts.rows || 2 } : { type: opts.type || 'text' }
+  });
+  input.value = value || '';
+  input.addEventListener('input', () => { onInput(input.value); markDirty(); });
+  wrap.appendChild(input);
+  return wrap;
+}
+
+function buildDossierField() {
+  const wrap = el('div', { class: 'field' });
+  wrap.appendChild(el('label', { text: 'Numéro de dossier (généré automatiquement)' }));
+  const row = el('div', { class: 'dossier-row' });
+  const input = el('input', { attrs: { type: 'text' } });
+  input.value = CURRENT.dossier || '';
+  input.addEventListener('input', () => { CURRENT.dossier = input.value; markDirty(); });
+  const regen = el('button', {
+    class: 'btn btn-ghost btn-sm', text: '↻ Nouveau n°',
+    attrs: { title: 'Générer un nouveau numéro de dossier' },
+    on: {
+      click: async () => {
+        CURRENT.dossier = await nextDossierNumber();
+        input.value = CURRENT.dossier;
+        markDirty();
+      }
+    }
+  });
+  row.appendChild(input); row.appendChild(regen);
+  wrap.appendChild(row);
+  return wrap;
+}
+
+function buildMandataireSelector() {
+  const wrap = el('div', { class: 'field field-wide' });
+  wrap.appendChild(el('label', { text: 'Mandataire / agence' }));
+  const select = el('select');
+  const emptyOpt = el('option', { text: '— Sélectionner un mandataire —' }); emptyOpt.value = '';
+  select.appendChild(emptyOpt);
+  MANDATAIRES_CACHE.forEach(m => {
+    const o = el('option', { text: m.nom + (m.agence ? ' — ' + m.agence : '') });
+    o.value = m.id;
+    if (CURRENT.mandataire && CURRENT.mandataire.id === m.id) o.selected = true;
+    select.appendChild(o);
+  });
+  const addOpt = el('option', { text: '+ Nouveau mandataire…' }); addOpt.value = '__new__';
+  select.appendChild(addOpt);
+  select.addEventListener('change', () => {
+    if (select.value === '__new__') {
+      select.value = CURRENT.mandataire ? CURRENT.mandataire.id : '';
+      openMandataireQuickAdd(created => {
+        CURRENT.mandataire = created;
+        markDirty();
+        renderEditor('general');
+      });
+      return;
+    }
+    const m = MANDATAIRES_CACHE.find(x => x.id === select.value);
+    CURRENT.mandataire = m ? { id: m.id, nom: m.nom, agence: m.agence, telephone: m.telephone, email: m.email, adresse: m.adresse } : null;
+    markDirty();
+    renderEditor('general');
+  });
+  wrap.appendChild(select);
+  if (CURRENT.mandataire) {
+    const info = el('div', { class: 'mandataire-info' });
+    if (CURRENT.mandataire.telephone) info.appendChild(el('div', { text: '📞 ' + CURRENT.mandataire.telephone }));
+    if (CURRENT.mandataire.email) info.appendChild(el('div', { text: '✉️ ' + CURRENT.mandataire.email }));
+    if (CURRENT.mandataire.adresse) info.appendChild(el('div', { text: '📍 ' + CURRENT.mandataire.adresse }));
+    wrap.appendChild(info);
+  }
+  return wrap;
+}
+
+function openMandataireQuickAdd(onCreated) {
+  const overlay = el('div', { class: 'modal-overlay' });
+  const box = el('div', { class: 'modal-box' });
+  box.appendChild(el('h3', { class: 'box-title', text: 'Nouveau mandataire' }));
+  const data = { nom: '', agence: '', telephone: '', email: '', adresse: '' };
+  const grid = el('div', { class: 'form-grid' });
+  grid.appendChild(simpleField('Nom', '', v => data.nom = v));
+  grid.appendChild(simpleField('Agence', '', v => data.agence = v));
+  grid.appendChild(simpleField('Téléphone', '', v => data.telephone = v));
+  grid.appendChild(simpleField('Email', '', v => data.email = v));
+  grid.appendChild(simpleField('Adresse', '', v => data.adresse = v, { wide: true }));
+  box.appendChild(grid);
+  const actions = el('div', { class: 'modal-actions' });
+  actions.appendChild(el('button', { class: 'btn btn-ghost btn-sm', text: 'Annuler', on: { click: () => overlay.remove() } }));
+  actions.appendChild(el('button', {
+    class: 'btn btn-primary btn-sm', text: 'Enregistrer',
+    on: {
+      click: async () => {
+        if (!data.nom.trim()) { alert('Le nom est obligatoire.'); return; }
+        const rec = { id: uid(), ...data };
+        const list = await Store.getMandataires();
+        list.push(rec);
+        await Store.saveMandataires(list);
+        MANDATAIRES_CACHE = list;
+        overlay.remove();
+        onCreated(rec);
+      }
+    }
+  }));
+  box.appendChild(actions);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+}
+
+async function renderMandataires() {
+  CURRENT = null;
+  const list = await Store.getMandataires();
+  App.innerHTML = '';
+
+  const header = el('div', { class: 'topbar' });
+  header.appendChild(el('button', { class: 'btn-back', text: '← Accueil', on: { click: renderHome } }));
+  header.appendChild(el('div', { class: 'brand brand-compact', html: '<span class="brand-a">AG</span>LOC' }));
+  header.appendChild(el('div', { class: 'insp-header-title', text: 'Mandataires & agences' }));
+  App.appendChild(header);
+
+  const wrap = el('div', { class: 'page' });
+
+  const addBox = el('div', { class: 'box' });
+  addBox.appendChild(el('h3', { class: 'box-title', text: 'Ajouter un mandataire' }));
+  const data = { nom: '', agence: '', telephone: '', email: '', adresse: '' };
+  const grid = el('div', { class: 'form-grid' });
+  grid.appendChild(simpleField('Nom', '', v => data.nom = v));
+  grid.appendChild(simpleField('Agence', '', v => data.agence = v));
+  grid.appendChild(simpleField('Téléphone', '', v => data.telephone = v));
+  grid.appendChild(simpleField('Email', '', v => data.email = v));
+  grid.appendChild(simpleField('Adresse', '', v => data.adresse = v, { wide: true }));
+  addBox.appendChild(grid);
+  addBox.appendChild(el('button', {
+    class: 'btn btn-primary btn-sm', text: '+ Ajouter',
+    on: {
+      click: async () => {
+        if (!data.nom.trim()) { alert('Le nom est obligatoire.'); return; }
+        const rec = { id: uid(), ...data };
+        const l = await Store.getMandataires();
+        l.push(rec);
+        await Store.saveMandataires(l);
+        renderMandataires();
+      }
+    }
+  }));
+  wrap.appendChild(addBox);
+
+  wrap.appendChild(el('h2', { class: 'section-title', text: 'Mandataires enregistrés (' + list.length + ')' }));
+  if (!list.length) {
+    wrap.appendChild(el('p', { class: 'empty', text: 'Aucun mandataire enregistré pour le moment.' }));
+  } else {
+    list.forEach(m => wrap.appendChild(buildMandataireCard(m)));
+  }
+  App.appendChild(wrap);
+}
+
+const saveMandataireEditDebounced = debounce(async (m) => {
+  const l = await Store.getMandataires();
+  const i = l.findIndex(x => x.id === m.id);
+  if (i >= 0) { l[i] = m; await Store.saveMandataires(l); }
+}, 500);
+
+function buildMandataireCard(m) {
+  const card = el('div', { class: 'box' });
+  const grid = el('div', { class: 'form-grid' });
+  grid.appendChild(simpleField('Nom', m.nom, v => { m.nom = v; saveMandataireEditDebounced(m); }));
+  grid.appendChild(simpleField('Agence', m.agence, v => { m.agence = v; saveMandataireEditDebounced(m); }));
+  grid.appendChild(simpleField('Téléphone', m.telephone, v => { m.telephone = v; saveMandataireEditDebounced(m); }));
+  grid.appendChild(simpleField('Email', m.email, v => { m.email = v; saveMandataireEditDebounced(m); }));
+  grid.appendChild(simpleField('Adresse', m.adresse, v => { m.adresse = v; saveMandataireEditDebounced(m); }, { wide: true }));
+  card.appendChild(grid);
+  card.appendChild(el('button', {
+    class: 'btn btn-danger btn-sm', text: 'Supprimer',
+    on: {
+      click: async () => {
+        if (!confirm('Supprimer "' + (m.nom || 'ce mandataire') + '" ? Les états des lieux existants garderont ses coordonnées telles quelles.')) return;
+        const l = (await Store.getMandataires()).filter(x => x.id !== m.id);
+        await Store.saveMandataires(l);
+        renderMandataires();
+      }
+    }
+  }));
+  return card;
+}
+
+function buildGeneralTab(content) {
+  const grid = el('div', { class: 'form-grid' });
+  grid.appendChild(buildDossierField());
+  grid.appendChild(field('Technicien', CURRENT.technicien, v => CURRENT.technicien = v));
+  grid.appendChild(buildMandataireSelector());
+  grid.appendChild(field('Propriétaire', CURRENT.proprietaire, v => CURRENT.proprietaire = v));
+  grid.appendChild(field('Type de bien', CURRENT.bienType, v => CURRENT.bienType = v));
+  grid.appendChild(field('Nombre de pièces', CURRENT.bienPieces, v => CURRENT.bienPieces = v));
+  grid.appendChild(field('Adresse du bien', CURRENT.bienAdresse, v => CURRENT.bienAdresse = v, { wide: true }));
+  content.appendChild(sectionBox('Informations générales', grid));
+
+  const grid2 = el('div', { class: 'form-grid' });
+  grid2.appendChild(field('Locataire entrant — nom', CURRENT.entrantNom, v => CURRENT.entrantNom = v));
+  grid2.appendChild(field('Locataire entrant — date d\'entrée', CURRENT.entrantDate, v => CURRENT.entrantDate = v, { type: 'date' }));
+  grid2.appendChild(field('Locataire sortant — nom', CURRENT.sortantNom, v => CURRENT.sortantNom = v));
+  grid2.appendChild(field('Locataire sortant — date de sortie', CURRENT.sortantDate, v => CURRENT.sortantDate = v, { type: 'date' }));
+  content.appendChild(sectionBox('Locataires', grid2));
+
+  const grid3 = el('div', { class: 'form-grid' });
+  grid3.appendChild(field('Fournisseur ligne téléphonique', CURRENT.fournisseurTel, v => CURRENT.fournisseurTel = v));
+  grid3.appendChild(field('Fournisseur de gaz', CURRENT.fournisseurGaz, v => CURRENT.fournisseurGaz = v));
+  grid3.appendChild(field('Fournisseur d\'électricité', CURRENT.fournisseurElec, v => CURRENT.fournisseurElec = v));
+  content.appendChild(sectionBox('Fournisseurs', grid3));
+}
+
+function sectionBox(title, inner) {
+  const box = el('div', { class: 'box' });
+  box.appendChild(el('h3', { class: 'box-title', text: title }));
+  box.appendChild(inner);
+  return box;
+}
+
+/* ---- Clés & compteurs ---- */
+function buildClesTab(content) {
+  const clesBox = el('div', { class: 'box' });
+  clesBox.appendChild(el('h3', { class: 'box-title', text: 'Clés remises' }));
+  const clesList = el('div', { class: 'cles-list' });
+  clesBox.appendChild(clesList);
+  const renderCles = () => {
+    clesList.innerHTML = '';
+    CURRENT.cles.forEach((c, i) => {
+      const row = el('div', { class: 'cle-row' });
+      const nb = el('input', { attrs: { type: 'text', placeholder: 'Nb' } }); nb.value = c.nombre;
+      nb.addEventListener('input', () => { c.nombre = nb.value; markDirty(); });
+      const num = el('input', { attrs: { type: 'text', placeholder: 'N° (optionnel)' } }); num.value = c.numero;
+      num.addEventListener('input', () => { c.numero = num.value; markDirty(); });
+      const obs = el('input', { attrs: { type: 'text', placeholder: 'Ex : Porte d\'entrée' } }); obs.value = c.obs;
+      obs.addEventListener('input', () => { c.obs = obs.value; markDirty(); });
+      const del = el('button', { class: 'btn-icon', text: '✕', on: { click: () => { CURRENT.cles.splice(i, 1); markDirty(); renderCles(); } } });
+      row.appendChild(nb); row.appendChild(num); row.appendChild(obs); row.appendChild(del);
+      clesList.appendChild(row);
+    });
+  };
+  renderCles();
+  clesBox.appendChild(el('button', {
+    class: 'btn btn-outline btn-sm', text: '+ Ajouter une clé',
+    on: { click: () => { CURRENT.cles.push({ nombre: '', numero: '', obs: '' }); markDirty(); renderCles(); } }
+  }));
+  content.appendChild(clesBox);
+
+  const meterBox = el('div', { class: 'box' });
+  meterBox.appendChild(el('h3', { class: 'box-title', text: 'Relevé des compteurs' }));
+  CURRENT.compteurs.forEach(m => meterBox.appendChild(buildMeterRow(m)));
+  content.appendChild(meterBox);
+}
+
+function buildMeterRow(m) {
+  const row = el('div', { class: 'meter-row' });
+  row.appendChild(el('div', { class: 'meter-type', text: m.type }));
+  const releve = el('input', { attrs: { type: 'text', placeholder: 'Relevé' } }); releve.value = m.releve;
+  releve.addEventListener('input', () => { m.releve = releve.value; markDirty(); });
+  const coupe = el('select');
+  ['NON', 'OUI'].forEach(v => { const o = el('option', { text: v }); o.value = v; coupe.appendChild(o); });
+  coupe.value = m.coupe || 'NON';
+  coupe.addEventListener('change', () => { m.coupe = coupe.value; markDirty(); });
+  const obs = el('input', { attrs: { type: 'text', placeholder: 'Observations' } }); obs.value = m.obs;
+  obs.addEventListener('input', () => { m.obs = obs.value; markDirty(); });
+  const inputsWrap = el('div', { class: 'meter-inputs' });
+  inputsWrap.appendChild(releve); inputsWrap.appendChild(coupe); inputsWrap.appendChild(obs);
+  row.appendChild(inputsWrap);
+  row.appendChild(buildPhotoWidget(m.photos, () => markDirty()));
+  return row;
+}
+
+/* ---- Chauffage / ECS ---- */
+function buildChauffageTab(content) {
+  const box = el('div', { class: 'box' });
+  box.appendChild(el('h3', { class: 'box-title', text: 'Type de chauffage' }));
+  const grid1 = el('div', { class: 'checkbox-grid' });
+  CHAUFFAGE_OPTIONS.forEach(opt => grid1.appendChild(buildCheckOption(opt, CURRENT.chauffage)));
+  box.appendChild(grid1);
+  content.appendChild(box);
+
+  const box2 = el('div', { class: 'box' });
+  box2.appendChild(el('h3', { class: 'box-title', text: 'Production d\'eau chaude' }));
+  const grid2 = el('div', { class: 'checkbox-grid' });
+  ECS_OPTIONS.forEach(opt => grid2.appendChild(buildCheckOption(opt, CURRENT.ecs)));
+  box2.appendChild(grid2);
+  content.appendChild(box2);
+
+  const box3 = el('div', { class: 'box' });
+  box3.appendChild(el('h3', { class: 'box-title', text: 'Entretien des appareils gaz' }));
+  box3.appendChild(field('Observations', CURRENT.entretienGaz, v => CURRENT.entretienGaz = v));
+  content.appendChild(box3);
+}
+
+function buildCheckOption(label, arr) {
+  const wrap = el('label', { class: 'check-option' });
+  const cb = el('input', { attrs: { type: 'checkbox' } });
+  cb.checked = arr.includes(label);
+  cb.addEventListener('change', () => {
+    const i = arr.indexOf(label);
+    if (cb.checked && i === -1) arr.push(label);
+    if (!cb.checked && i !== -1) arr.splice(i, 1);
+    markDirty();
+  });
+  wrap.appendChild(cb);
+  wrap.appendChild(el('span', { text: label }));
+  return wrap;
+}
+
+/* ---- Photo widget (réutilisable) ---- */
+function buildPhotoWidget(photoIds, onChange) {
+  const wrap = el('div', { class: 'photo-widget' });
+  const strip = el('div', { class: 'photo-strip' });
+  wrap.appendChild(strip);
+
+  const renderStrip = () => {
+    strip.innerHTML = '';
+    photoIds.forEach((pid, i) => {
+      const thumb = el('div', { class: 'photo-thumb' });
+      const img = el('img');
+      Store.getPhoto(pid).then(url => { if (url) img.src = url; });
+      thumb.appendChild(img);
+      thumb.appendChild(el('button', {
+        class: 'photo-del', text: '✕',
+        on: {
+          click: async () => {
+            await Store.deletePhoto(pid);
+            photoIds.splice(i, 1);
+            onChange();
+            renderStrip();
+          }
+        }
+      }));
+      strip.appendChild(thumb);
+    });
+    const addBtn = el('label', { class: 'photo-add' });
+    addBtn.appendChild(el('span', { text: '+ Photo' }));
+    const input = el('input', { attrs: { type: 'file', accept: 'image/*', multiple: 'multiple' } });
+    input.style.display = 'none';
+    input.addEventListener('change', async () => {
+      const files = Array.from(input.files || []);
+      for (const f of files) {
+        try {
+          const dataUrl = await compressImage(f);
+          const pid = uid();
+          await Store.setPhoto(pid, dataUrl);
+          photoIds.push(pid);
+        } catch (e) { /* ignore fichier illisible */ }
+      }
+      input.value = '';
+      onChange();
+      renderStrip();
+    });
+    addBtn.appendChild(input);
+    strip.appendChild(addBtn);
+  };
+  renderStrip();
+  return wrap;
+}
+
+/* ---- Pièces ---- */
+function buildPiecesTab(content) {
+  const addBox = el('div', { class: 'box add-room-box' });
+  addBox.appendChild(el('h3', { class: 'box-title', text: 'Ajouter une pièce' }));
+  const row = el('div', { class: 'add-room-row' });
+  const select = el('select');
+  Object.keys(ROOM_PRESETS).forEach(name => { const o = el('option', { text: name }); o.value = name; select.appendChild(o); });
+  const nameInput = el('input', { attrs: { type: 'text', placeholder: 'Nom de la pièce (ex : Chambre 2)' } });
+  const addBtn = el('button', {
+    class: 'btn btn-primary btn-sm', text: '+ Ajouter',
+    on: {
+      click: () => {
+        const preset = select.value;
+        const name = nameInput.value.trim() || preset;
+        const room = newRoom(name, ROOM_PRESETS[preset]);
+        CURRENT.pieces.push(room);
+        markDirty();
+        nameInput.value = '';
+        rerenderPieces();
+      }
+    }
+  });
+  row.appendChild(select); row.appendChild(nameInput); row.appendChild(addBtn);
+  addBox.appendChild(row);
+  content.appendChild(addBox);
+
+  const roomsWrap = el('div', { class: 'rooms-wrap' });
+  content.appendChild(roomsWrap);
+
+  function rerenderPieces() {
+    roomsWrap.innerHTML = '';
+    CURRENT.pieces.forEach(room => roomsWrap.appendChild(buildRoomCard(room)));
+  }
+  rerenderPieces();
+}
+
+function buildRoomCard(room) {
+  const card = el('div', { class: 'room-card' });
+  const head = el('div', { class: 'room-head' });
+  const nameInput = el('input', { class: 'room-name-input' });
+  nameInput.value = room.nom;
+  nameInput.addEventListener('input', () => { room.nom = nameInput.value; markDirty(); });
+  head.appendChild(nameInput);
+  head.appendChild(el('button', {
+    class: 'btn btn-danger btn-sm', text: 'Supprimer la pièce',
+    on: {
+      click: async () => {
+        if (!confirm('Supprimer la pièce "' + room.nom + '" et toutes ses lignes ?')) return;
+        for (const l of room.lignes) { for (const pid of (l.photos || [])) await Store.deletePhoto(pid); }
+        CURRENT.pieces = CURRENT.pieces.filter(r => r.id !== room.id);
+        markDirty();
+        card.remove();
+      }
+    }
+  }));
+  card.appendChild(head);
+
+  const quick = el('div', { class: 'quick-criteres' });
+  QUICK_CRITERES.forEach(c => {
+    quick.appendChild(el('button', {
+      class: 'chip', text: '+ ' + c,
+      on: { click: () => { const l = newLigne(c); room.lignes.push(l); markDirty(); lignesWrap.appendChild(buildLigneRow(room, l)); } }
+    }));
+  });
+  card.appendChild(quick);
+
+  const lignesWrap = el('div', { class: 'lignes-wrap' });
+  room.lignes.forEach(l => lignesWrap.appendChild(buildLigneRow(room, l)));
+  card.appendChild(lignesWrap);
+
+  card.appendChild(el('button', {
+    class: 'btn btn-outline btn-sm', text: '+ Ajouter une ligne libre',
+    on: { click: () => { const l = newLigne(''); room.lignes.push(l); markDirty(); lignesWrap.appendChild(buildLigneRow(room, l)); } }
+  }));
+
+  return card;
+}
+
+function buildLigneRow(room, ligne) {
+  const row = el('div', { class: 'ligne-row' });
+
+  const top = el('div', { class: 'ligne-top' });
+  const critereInput = el('input', { class: 'critere-input', attrs: { type: 'text', placeholder: 'Élément contrôlé (ex : Mur, Sol, Porte...)' } });
+  critereInput.value = ligne.critere;
+  critereInput.addEventListener('input', () => { ligne.critere = critereInput.value; markDirty(); });
+  top.appendChild(critereInput);
+  const delBtn = el('button', {
+    class: 'btn-icon', text: '✕',
+    on: {
+      click: async () => {
+        for (const pid of (ligne.photos || [])) await Store.deletePhoto(pid);
+        room.lignes = room.lignes.filter(l => l.id !== ligne.id);
+        markDirty();
+        row.remove();
+      }
+    }
+  });
+  top.appendChild(delBtn);
+  row.appendChild(top);
+
+  const substratInput = el('input', { class: 'substrat-input', attrs: { type: 'text', placeholder: 'Substrat / précision (ex : Carrelage, Parpaings, Peinture blanche...)' } });
+  substratInput.value = ligne.substrat || '';
+  substratInput.addEventListener('input', () => { ligne.substrat = substratInput.value; markDirty(); });
+  row.appendChild(substratInput);
+
+  const states = el('div', { class: 'state-row' });
+  STATES.forEach(s => {
+    const btn = el('button', { class: 'state-btn' + (ligne.etat === s.code ? ' active' : ''), text: s.label });
+    btn.style.setProperty('--state-color', s.color);
+    btn.addEventListener('click', () => {
+      ligne.etat = (ligne.etat === s.code) ? '' : s.code;
+      markDirty();
+      states.querySelectorAll('.state-btn').forEach(b => b.classList.remove('active'));
+      if (ligne.etat) btn.classList.add('active');
+    });
+    states.appendChild(btn);
+  });
+  row.appendChild(states);
+
+  const commentInput = el('textarea', { attrs: { rows: 2, placeholder: 'Commentaire (ex : 1 choc, trace, joint dégradé…)' } });
+  commentInput.value = ligne.commentaire;
+  commentInput.addEventListener('input', () => { ligne.commentaire = commentInput.value; markDirty(); });
+  row.appendChild(commentInput);
+
+  const bottom = el('div', { class: 'ligne-bottom' });
+  const cleanLabel = el('label', { class: 'check-option' });
+  const cleanCb = el('input', { attrs: { type: 'checkbox' } });
+  cleanCb.checked = !!ligne.nettoyage;
+  cleanCb.addEventListener('change', () => { ligne.nettoyage = cleanCb.checked; markDirty(); });
+  cleanLabel.appendChild(cleanCb);
+  cleanLabel.appendChild(el('span', { text: 'Nettoyage incomplet' }));
+  bottom.appendChild(cleanLabel);
+  row.appendChild(bottom);
+
+  row.appendChild(buildPhotoWidget(ligne.photos, () => markDirty()));
+
+  return row;
+}
+
+/* ---- Récap & signatures ---- */
+function buildRecapTab(content) {
+  const box = el('div', { class: 'box' });
+  box.appendChild(el('h3', { class: 'box-title', text: 'État de propreté générale' }));
+  const radios = el('div', { class: 'radio-row' });
+  [['bon', 'Bon'], ['incomplet', 'Incomplet'], ['mauvais', 'Mauvais']].forEach(([val, label]) => {
+    const lab = el('label', { class: 'check-option' });
+    const rb = el('input', { attrs: { type: 'radio', name: 'proprete' } });
+    rb.checked = CURRENT.proprete === val;
+    rb.addEventListener('change', () => { CURRENT.proprete = val; markDirty(); });
+    lab.appendChild(rb); lab.appendChild(el('span', { text: label }));
+    radios.appendChild(lab);
+  });
+  box.appendChild(radios);
+  content.appendChild(box);
+
+  const degrades = [];
+  const incomplets = [];
+  CURRENT.pieces.forEach(room => {
+    room.lignes.forEach(l => {
+      if (l.etat === 'DEG') degrades.push({ room: room.nom, l });
+      if (l.nettoyage) incomplets.push({ room: room.nom, l });
+    });
+  });
+
+  const degBox = el('div', { class: 'box' });
+  degBox.appendChild(el('h3', { class: 'box-title', text: 'Éléments dégradés (' + degrades.length + ')' }));
+  if (!degrades.length) degBox.appendChild(el('p', { class: 'empty-sm', text: 'Aucun élément dégradé recensé.' }));
+  degrades.forEach(d => degBox.appendChild(recapLine(d.room, d.l)));
+  content.appendChild(degBox);
+
+  const incBox = el('div', { class: 'box' });
+  incBox.appendChild(el('h3', { class: 'box-title', text: 'Nettoyage incomplet (' + incomplets.length + ')' }));
+  if (!incomplets.length) incBox.appendChild(el('p', { class: 'empty-sm', text: 'Rien à signaler.' }));
+  incomplets.forEach(d => incBox.appendChild(recapLine(d.room, d.l)));
+  content.appendChild(incBox);
+
+  const sigBox = el('div', { class: 'box' });
+  sigBox.appendChild(el('h3', { class: 'box-title', text: 'Signatures' }));
+  const sigGrid = el('div', { class: 'sig-grid' });
+  const who = CURRENT.type === 'entree'
+    ? [['entrant', 'Locataire entrant'], ['proprietaire', 'Propriétaire / mandataire']]
+    : [['sortant', 'Locataire sortant'], ['entrant', 'Locataire entrant (si présent)'], ['proprietaire', 'Propriétaire / mandataire']];
+  who.forEach(([key, label]) => sigGrid.appendChild(buildSignaturePad(key, label)));
+  sigBox.appendChild(sigGrid);
+  content.appendChild(sigBox);
+
+  const pdfBtn = el('button', { class: 'btn btn-primary btn-lg pdf-btn', text: '📄 Générer le PDF de l\'état des lieux' });
+  pdfBtn.addEventListener('click', async () => {
+    pdfBtn.disabled = true;
+    pdfBtn.textContent = 'Génération en cours…';
+    try { await generatePDF(CURRENT); }
+    catch (e) { alert('Erreur lors de la génération du PDF : ' + e.message); }
+    pdfBtn.disabled = false;
+    pdfBtn.textContent = '📄 Générer le PDF de l\'état des lieux';
+  });
+  content.appendChild(pdfBtn);
+}
+
+function recapLine(roomName, l) {
+  const s = STATE_MAP[l.etat];
+  const row = el('div', { class: 'recap-line' });
+  row.appendChild(el('span', { class: 'recap-room', text: roomName }));
+  row.appendChild(el('span', { class: 'recap-critere', text: l.critere || '(sans nom)' }));
+  if (s) {
+    const badge = el('span', { class: 'recap-badge', text: s.label });
+    badge.style.background = s.color;
+    row.appendChild(badge);
+  }
+  if (l.commentaire) row.appendChild(el('span', { class: 'recap-comment', text: l.commentaire }));
+  return row;
+}
+
+function buildSignaturePad(key, label) {
+  const box = el('div', { class: 'sig-box' });
+  box.appendChild(el('div', { class: 'sig-label', text: label }));
+  const canvas = el('canvas', { class: 'sig-canvas', attrs: { width: '320', height: '150' } });
+  box.appendChild(canvas);
+  const ctx = canvas.getContext('2d');
+  ctx.strokeStyle = '#131e30';
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+
+  let drawing = false, hasDrawn = false;
+  const existing = CURRENT.signatures[key];
+  if (existing) {
+    const img = new Image();
+    img.onload = () => ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    img.src = existing;
+    hasDrawn = true;
+  }
+
+  function pos(e) {
+    const r = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / r.width, scaleY = canvas.height / r.height;
+    const p = e.touches ? e.touches[0] : e;
+    return { x: (p.clientX - r.left) * scaleX, y: (p.clientY - r.top) * scaleY };
+  }
+  function start(e) { drawing = true; hasDrawn = true; const p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); e.preventDefault(); }
+  function move(e) { if (!drawing) return; const p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); e.preventDefault(); }
+  function end() {
+    if (!drawing) return;
+    drawing = false;
+    CURRENT.signatures[key] = canvas.toDataURL('image/png');
+    markDirty();
+  }
+  canvas.addEventListener('mousedown', start);
+  canvas.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', end);
+  canvas.addEventListener('touchstart', start, { passive: false });
+  canvas.addEventListener('touchmove', move, { passive: false });
+  canvas.addEventListener('touchend', end);
+
+  const clearBtn = el('button', {
+    class: 'btn btn-ghost btn-sm', text: 'Effacer',
+    on: {
+      click: () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        CURRENT.signatures[key] = null;
+        hasDrawn = false;
+        markDirty();
+      }
+    }
+  });
+  box.appendChild(clearBtn);
+  return box;
+}
+
+/* ---- démarrage ---- */
+renderHome();
+/* ==========================================================================
+   AGLOC — Etat des lieux — génération PDF
+   ========================================================================== */
+
+function hexToRgb(hex) {
+  const v = hex.replace('#', '');
+  return [parseInt(v.substring(0, 2), 16), parseInt(v.substring(2, 4), 16), parseInt(v.substring(4, 6), 16)];
+}
+
+async function generatePDF(insp) {
+  if (!window.jspdf) { alert('La bibliothèque PDF n\'a pas pu se charger. Vérifiez la connexion internet.'); return; }
+
+  /* --- préchargement des photos --- */
+  const photoIds = collectPhotoIds(insp);
+  const photoCache = {};
+  for (const pid of photoIds) {
+    const url = await Store.getPhoto(pid);
+    if (url) photoCache[pid] = url;
+  }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 40;
+  const NAVY = [19, 30, 48], GOLD = [213, 168, 108], SUBTLE = [90, 106, 122], LIGHTBLUE = [236, 247, 254];
+  const state = { y: 84, page: 1 };
+
+  function drawHeader() {
+    doc.setFillColor(NAVY[0], NAVY[1], NAVY[2]);
+    doc.rect(0, 0, pageW, 60, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.text('AGLOC', margin, 30);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.text('Accompagnement locatif — Groupe AG', margin, 44);
+    const title = insp.type === 'entree' ? "État des lieux d'entrée" : 'État des lieux de sortie';
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text(title, pageW - margin, 26, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.text('Dossier ' + (insp.dossier || '—'), pageW - margin, 40, { align: 'right' });
+    doc.setFillColor(GOLD[0], GOLD[1], GOLD[2]);
+    doc.rect(0, 60, pageW, 4, 'F');
+  }
+
+  function drawFooter() {
+    doc.setDrawColor(GOLD[0], GOLD[1], GOLD[2]);
+    doc.setLineWidth(0.75);
+    doc.line(margin, pageH - 34, pageW - margin, pageH - 34);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
+    doc.text('AGLOC — Accompagnement locatif', margin, pageH - 22);
+    doc.text('Page ' + state.page, pageW - margin, pageH - 22, { align: 'right' });
+  }
+
+  function newPage() {
+    doc.addPage();
+    state.page += 1;
+    drawHeader();
+    drawFooter();
+    state.y = 84;
+  }
+
+  function ensureSpace(h) {
+    if (state.y + h > pageH - 50) newPage();
+  }
+
+  function sectionTitle(text) {
+    ensureSpace(26);
+    doc.setFillColor(LIGHTBLUE[0], LIGHTBLUE[1], LIGHTBLUE[2]);
+    doc.rect(margin, state.y, pageW - margin * 2, 20, 'F');
+    doc.setTextColor(NAVY[0], NAVY[1], NAVY[2]);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10.5);
+    doc.text(text, margin + 8, state.y + 14);
+    state.y += 30;
+  }
+
+  function roomTitle(text) {
+    ensureSpace(28);
+    doc.setFillColor(NAVY[0], NAVY[1], NAVY[2]);
+    doc.rect(margin, state.y, pageW - margin * 2, 20, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text(text.toUpperCase(), margin + 8, state.y + 14);
+    state.y += 30;
+  }
+
+  function drawKV(x, label, value, maxW) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
+    const labelTxt = label + ' : ';
+    doc.text(labelTxt, x, state.y);
+    const lw = doc.getTextWidth(labelTxt);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(NAVY[0], NAVY[1], NAVY[2]);
+    doc.text(String(value || '—'), x + lw, state.y, { maxWidth: Math.max(20, maxW - lw) });
+  }
+
+  function rowPairs(pairs) {
+    const half = (pageW - 2 * margin) / 2;
+    for (let i = 0; i < pairs.length; i += 2) {
+      ensureSpace(16);
+      drawKV(margin, pairs[i][0], pairs[i][1], half - 10);
+      if (pairs[i + 1]) drawKV(margin + half, pairs[i + 1][0], pairs[i + 1][1], half - 10);
+      state.y += 16;
+    }
+    state.y += 8;
+  }
+
+  function checklistLine(options, selected) {
+    ensureSpace(16);
+    let x = margin;
+    options.forEach(o => {
+      const checked = selected.includes(o);
+      const w = doc.getTextWidth(o) + 16;
+      if (x + w > pageW - margin) { x = margin; state.y += 16; ensureSpace(16); }
+      doc.setDrawColor(NAVY[0], NAVY[1], NAVY[2]);
+      doc.rect(x, state.y - 8, 8, 8);
+      if (checked) {
+        doc.setFillColor(GOLD[0], GOLD[1], GOLD[2]);
+        doc.rect(x + 1.2, state.y - 6.8, 5.6, 5.6, 'F');
+      }
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(NAVY[0], NAVY[1], NAVY[2]);
+      doc.text(o, x + 12, state.y);
+      x += w + 6;
+    });
+    state.y += 20;
+  }
+
+  function table(headers, rows, colWidths) {
+    ensureSpace(18);
+    let x = margin;
+    doc.setFillColor(NAVY[0], NAVY[1], NAVY[2]);
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    const rowH = 16;
+    headers.forEach((h, i) => { doc.rect(x, state.y, colWidths[i], rowH, 'F'); doc.text(h, x + 4, state.y + 11); x += colWidths[i]; });
+    state.y += rowH;
+    rows.forEach((r, ri) => {
+      ensureSpace(rowH);
+      x = margin;
+      const fill = ri % 2 === 0 ? LIGHTBLUE : [255, 255, 255];
+      r.forEach((cell, i) => {
+        doc.setFillColor(fill[0], fill[1], fill[2]);
+        doc.setDrawColor(GOLD[0], GOLD[1], GOLD[2]);
+        doc.rect(x, state.y, colWidths[i], rowH, 'FD');
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(NAVY[0], NAVY[1], NAVY[2]);
+        doc.text(String(cell === undefined || cell === null || cell === '' ? '—' : cell), x + 4, state.y + 11, { maxWidth: colWidths[i] - 8 });
+        x += colWidths[i];
+      });
+      state.y += rowH;
+    });
+    state.y += 12;
+  }
+
+  function photoRow(photoIdsForRow) {
+    const photos = (photoIdsForRow || []).map(pid => photoCache[pid]).filter(Boolean);
+    if (!photos.length) return;
+    const thumbW = 78, thumbH = 58, gap = 6;
+    let x = margin;
+    ensureSpace(thumbH + 6);
+    photos.forEach(durl => {
+      if (x + thumbW > pageW - margin) { x = margin; state.y += thumbH + gap; ensureSpace(thumbH + 6); }
+      try { doc.addImage(durl, 'JPEG', x, state.y, thumbW, thumbH); } catch (e) { /* ignore image invalide */ }
+      x += thumbW + gap;
+    });
+    state.y += thumbH + 10;
+  }
+
+  /* ---- Table "Détails de l'état des lieux" (grille identique au modèle) ---- */
+  const ETAT_COLS = ['NEUF', 'BE', 'EM', 'ME', 'DEG'];
+  const ETAT_LABELS = { NEUF: 'NEUF', BE: 'B.E', EM: 'E.M', ME: 'M.E', DEG: 'DEG' };
+  const COL = {
+    critere: 128,
+    etat: 30,
+    nettoyage: 46,
+  };
+  COL.commentaire = (pageW - 2 * margin) - COL.critere - COL.etat * ETAT_COLS.length - COL.nettoyage;
+
+  function etatTableHeader() {
+    ensureSpace(30);
+    let x = margin;
+    const rowH = 26;
+    doc.setFillColor(NAVY[0], NAVY[1], NAVY[2]);
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.rect(x, state.y, COL.critere, rowH, 'F');
+    doc.text('Critères', x + 5, state.y + 15);
+    x += COL.critere;
+    ETAT_COLS.forEach(code => {
+      doc.rect(x, state.y, COL.etat, rowH, 'F');
+      doc.text(ETAT_LABELS[code], x + COL.etat / 2, state.y + 15, { align: 'center' });
+      x += COL.etat;
+    });
+    doc.rect(x, state.y, COL.nettoyage, rowH, 'F');
+    doc.text('Nettoy.', x + COL.nettoyage / 2, state.y + 11, { align: 'center' });
+    doc.text('incompl.', x + COL.nettoyage / 2, state.y + 20, { align: 'center' });
+    x += COL.nettoyage;
+    doc.rect(x, state.y, COL.commentaire, rowH, 'F');
+    doc.text('Commentaires', x + 5, state.y + 15);
+    state.y += rowH;
+  }
+
+  function drawLigne(ligne) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    const critereLines = doc.splitTextToSize(ligne.critere || '(sans nom)', COL.critere - 10);
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7);
+    const substratLines = ligne.substrat ? doc.splitTextToSize('Substrat : ' + ligne.substrat, COL.critere - 10) : [];
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    const commentLines = ligne.commentaire ? doc.splitTextToSize(ligne.commentaire, COL.commentaire - 10) : [];
+
+    const critereH = critereLines.length * 10 + substratLines.length * 9 + 10;
+    const commentH = commentLines.length * 10 + 10;
+    const rowH = Math.max(24, critereH, commentH);
+
+    const pageBefore = state.page;
+    ensureSpace(rowH + 4);
+    if (state.page !== pageBefore) etatTableHeader();
+    let x = margin;
+    const y0 = state.y;
+
+    doc.setDrawColor(GOLD[0], GOLD[1], GOLD[2]);
+    doc.setLineWidth(0.6);
+
+    /* Critère + substrat */
+    doc.rect(x, y0, COL.critere, rowH, 'S');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(NAVY[0], NAVY[1], NAVY[2]);
+    doc.text(critereLines, x + 5, y0 + 12);
+    if (substratLines.length) {
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(7);
+      doc.setTextColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
+      doc.text(substratLines, x + 5, y0 + 12 + critereLines.length * 10 + 6);
+    }
+    x += COL.critere;
+
+    /* Colonnes d'état : case cochée (X) dans la colonne correspondante */
+    ETAT_COLS.forEach(code => {
+      doc.setDrawColor(GOLD[0], GOLD[1], GOLD[2]);
+      doc.rect(x, y0, COL.etat, rowH, 'S');
+      if (ligne.etat === code) {
+        const s = STATE_MAP[code];
+        const rgb = hexToRgb(s.color);
+        doc.setTextColor(rgb[0], rgb[1], rgb[2]);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.text('X', x + COL.etat / 2, y0 + rowH / 2 + 4, { align: 'center' });
+      }
+      x += COL.etat;
+    });
+
+    /* Nettoyage incomplet */
+    doc.rect(x, y0, COL.nettoyage, rowH, 'S');
+    if (ligne.nettoyage) {
+      doc.setTextColor(183, 119, 13);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.text('X', x + COL.nettoyage / 2, y0 + rowH / 2 + 4, { align: 'center' });
+    }
+    x += COL.nettoyage;
+
+    /* Commentaires */
+    doc.rect(x, y0, COL.commentaire, rowH, 'S');
+    if (commentLines.length) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(NAVY[0], NAVY[1], NAVY[2]);
+      doc.text(commentLines, x + 5, y0 + 12);
+    }
+
+    state.y = y0 + rowH;
+
+    if ((ligne.photos || []).length) {
+      state.y += 4;
+      photoRow(ligne.photos);
+    }
+  }
+
+  /* ---------------- construction du document ---------------- */
+  drawHeader(); drawFooter();
+
+  const mandataireStr = insp.mandataire
+    ? [insp.mandataire.nom, insp.mandataire.agence].filter(Boolean).join(' — ') +
+      (insp.mandataire.telephone ? ' · ' + insp.mandataire.telephone : '')
+    : '';
+
+  sectionTitle('Informations générales');
+  rowPairs([
+    ['Numéro de dossier', insp.dossier],
+    ['Date', fmtDate(insp.updatedAt)],
+    ['Technicien', insp.technicien],
+    ['Mandataire', mandataireStr],
+    ['Propriétaire', insp.proprietaire],
+    ['Type de bien', insp.bienType + (insp.bienPieces ? ' — ' + insp.bienPieces + ' pièce(s)' : '')],
+    ['Adresse', insp.bienAdresse],
+  ]);
+
+  sectionTitle('Locataires');
+  rowPairs([
+    ['Entrant', insp.entrantNom], ['Date d\'entrée', insp.entrantDate ? fmtDate(insp.entrantDate) : ''],
+    ['Sortant', insp.sortantNom], ['Date de sortie', insp.sortantDate ? fmtDate(insp.sortantDate) : ''],
+  ]);
+
+  sectionTitle('Fournisseurs');
+  rowPairs([
+    ['Ligne téléphonique', insp.fournisseurTel], ['Gaz', insp.fournisseurGaz],
+    ['Électricité', insp.fournisseurElec], ['', ''],
+  ]);
+
+  sectionTitle('Clés remises');
+  table(['Nombre', 'Numéro', 'Observations'],
+    insp.cles.map(c => [c.nombre, c.numero, c.obs]),
+    [70, 120, pageW - 2 * margin - 190]);
+
+  sectionTitle('Relevé des compteurs');
+  table(['Type', 'Relevé', 'Date', 'Coupé', 'Observations'],
+    insp.compteurs.map(m => [m.type, m.releve, m.date, m.coupe, m.obs]),
+    [150, 70, 65, 45, pageW - 2 * margin - 330]);
+  insp.compteurs.forEach(m => { if ((m.photos || []).length) photoRow(m.photos); });
+
+  sectionTitle('Type de chauffage');
+  checklistLine(CHAUFFAGE_OPTIONS, insp.chauffage);
+  sectionTitle('Production d\'eau chaude');
+  checklistLine(ECS_OPTIONS, insp.ecs);
+  if (insp.entretienGaz) {
+    ensureSpace(14);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(NAVY[0], NAVY[1], NAVY[2]);
+    doc.text('Entretien gaz : ' + insp.entretienGaz, margin, state.y);
+    state.y += 18;
+  }
+
+  insp.pieces.forEach(room => {
+    roomTitle(room.nom);
+    if (!room.lignes.length) {
+      doc.setFont('helvetica', 'italic'); doc.setFontSize(8.5); doc.setTextColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
+      doc.text('Aucune ligne renseignée.', margin, state.y); state.y += 16;
+    } else {
+      etatTableHeader();
+    }
+    room.lignes.forEach(l => drawLigne(l));
+    state.y += 10;
+  });
+
+  sectionTitle('État de propreté générale');
+  const propreteLabel = { bon: 'Bon', incomplet: 'Incomplet', mauvais: 'Mauvais' }[insp.proprete] || '—';
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(NAVY[0], NAVY[1], NAVY[2]);
+  doc.text(propreteLabel, margin, state.y); state.y += 20;
+
+  const degrades = [];
+  const incomplets = [];
+  insp.pieces.forEach(room => room.lignes.forEach(l => {
+    if (l.etat === 'DEG') degrades.push({ room: room.nom, l });
+    if (l.nettoyage) incomplets.push({ room: room.nom, l });
+  }));
+
+  sectionTitle('Éléments dégradés');
+  if (!degrades.length) {
+    doc.setFont('helvetica', 'italic'); doc.setFontSize(8.5); doc.setTextColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
+    doc.text('Aucun élément dégradé recensé.', margin, state.y); state.y += 16;
+  } else {
+    table(['Pièce', 'Élément', 'Commentaire'],
+      degrades.map(d => [d.room, d.l.critere, d.l.commentaire]),
+      [130, 130, pageW - 2 * margin - 260]);
+  }
+
+  sectionTitle('Nettoyage incomplet');
+  if (!incomplets.length) {
+    doc.setFont('helvetica', 'italic'); doc.setFontSize(8.5); doc.setTextColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
+    doc.text('Rien à signaler.', margin, state.y); state.y += 16;
+  } else {
+    table(['Pièce', 'Élément', 'Commentaire'],
+      incomplets.map(d => [d.room, d.l.critere, d.l.commentaire]),
+      [130, 130, pageW - 2 * margin - 260]);
+  }
+
+  /* ---------------- page signatures ---------------- */
+  newPage();
+  sectionTitle('Signatures des parties');
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
+  const legal = "Les parties reconnaissent avoir pris connaissance de la totalité du présent état des lieux et en attestent l'exactitude. Ce document, établi contradictoirement, fait partie intégrante du contrat de location et ne peut en être dissocié, conformément à l'article 3-2 de la loi n°89-462 du 6 juillet 1989 et au décret n°2016-382 du 30 mars 2016.";
+  const legalLines = doc.splitTextToSize(legal, pageW - 2 * margin);
+  doc.text(legalLines, margin, state.y);
+  state.y += legalLines.length * 11 + 20;
+
+  const sigKeys = insp.type === 'entree'
+    ? [['entrant', 'Locataire entrant', insp.entrantNom], ['proprietaire', 'Propriétaire / mandataire', insp.proprietaire]]
+    : [['sortant', 'Locataire sortant', insp.sortantNom], ['entrant', 'Locataire entrant', insp.entrantNom], ['proprietaire', 'Propriétaire / mandataire', insp.proprietaire]];
+
+  const boxW = (pageW - 2 * margin - (sigKeys.length - 1) * 16) / sigKeys.length;
+  const boxH = 130;
+  ensureSpace(boxH + 20);
+  sigKeys.forEach((sk, i) => {
+    const x = margin + i * (boxW + 16);
+    doc.setDrawColor(GOLD[0], GOLD[1], GOLD[2]);
+    doc.setLineWidth(1);
+    doc.rect(x, state.y, boxW, boxH);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(NAVY[0], NAVY[1], NAVY[2]);
+    doc.text(sk[1], x + 6, state.y + 14);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
+    doc.text(sk[2] || '', x + 6, state.y + 26, { maxWidth: boxW - 12 });
+    const sigData = insp.signatures[sk[0]];
+    if (sigData) {
+      try { doc.addImage(sigData, 'PNG', x + 6, state.y + 34, boxW - 12, boxH - 44); } catch (e) { /* ignore */ }
+    } else {
+      doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor(200, 200, 200);
+      doc.text('Non signé', x + 6, state.y + boxH - 10);
+    }
+  });
+  state.y += boxH + 20;
+
+  const filename = 'EDL_' + (insp.type === 'entree' ? 'Entree' : 'Sortie') + '_' +
+    (insp.dossier ? insp.dossier.replace(/[^a-zA-Z0-9_-]+/g, '_') : insp.id) + '.pdf';
+  doc.save(filename);
+}
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
