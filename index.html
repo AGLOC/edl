@@ -155,8 +155,12 @@ button, input, select, textarea { font-family: inherit; }
 
 /* ---------- Clés ---------- */
 .cles-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
-.cle-row { display: grid; grid-template-columns: 60px 1fr 2fr 30px; gap: 8px; align-items: center; }
-.cle-row input {
+.cle-row {
+  border-bottom: 1px solid var(--border); padding: 10px 0; display: flex; flex-direction: column; gap: 8px;
+}
+.cle-row:last-child { border-bottom: none; }
+.cle-row-inputs { display: grid; grid-template-columns: 60px 1fr 2fr 30px; gap: 8px; align-items: center; }
+.cle-row-inputs input {
   border: 1.5px solid var(--border); border-radius: 7px; padding: 8px; font-size: 13px; width: 100%;
 }
 
@@ -592,6 +596,7 @@ const Store = {
 
 function collectPhotoIds(insp) {
   const ids = [];
+  (insp.cles || []).forEach(c => (c.photos || []).forEach(p => ids.push(p)));
   (insp.compteurs || []).forEach(m => (m.photos || []).forEach(p => ids.push(p)));
   (insp.pieces || []).forEach(room => (room.lignes || []).forEach(l => (l.photos || []).forEach(p => ids.push(p))));
   return ids;
@@ -616,7 +621,7 @@ function newInspection(type) {
     entrantDate: type === 'entree' ? now : '',
     sortantDate: type === 'sortie' ? now : '',
     fournisseurTel: '', fournisseurGaz: '', fournisseurElec: '',
-    cles: [{ nombre: '2', numero: '', obs: 'Porte d\'entrée' }],
+    cles: [{ nombre: '2', numero: '', obs: 'Porte d\'entrée', photos: [] }],
     chauffage: [], ecs: [],
     entretienGaz: '',
     compteurs: METER_TYPES.map(t => ({ type: t, releve: '', date: fmtDate(now), obs: '', coupe: 'NON', photos: [] })),
@@ -758,7 +763,7 @@ async function duplicateInspection(id) {
   copy.fournisseurGaz = src.fournisseurGaz;
   copy.fournisseurElec = src.fournisseurElec;
   copy.dossier = computeDossierLabel(copy);
-  copy.cles = JSON.parse(JSON.stringify(src.cles || []));
+  copy.cles = (src.cles || []).map(c => ({ nombre: c.nombre, numero: c.numero, obs: c.obs, photos: [] }));
   copy.chauffage = [...(src.chauffage || [])];
   copy.ecs = [...(src.ecs || [])];
   copy.pieces = (src.pieces || []).map(room => ({
@@ -1189,15 +1194,27 @@ function buildClesTab(content) {
       num.addEventListener('input', () => { c.numero = num.value; markDirty(); });
       const obs = el('input', { attrs: { type: 'text', placeholder: 'Ex : Porte d\'entrée' } }); obs.value = c.obs;
       obs.addEventListener('input', () => { c.obs = obs.value; markDirty(); });
-      const del = el('button', { class: 'btn-icon', text: '✕', on: { click: () => { CURRENT.cles.splice(i, 1); markDirty(); renderCles(); } } });
-      row.appendChild(nb); row.appendChild(num); row.appendChild(obs); row.appendChild(del);
+      const del = el('button', {
+        class: 'btn-icon', text: '✕',
+        on: {
+          click: async () => {
+            for (const pid of (c.photos || [])) await Store.deletePhoto(pid);
+            CURRENT.cles.splice(i, 1); markDirty(); renderCles();
+          }
+        }
+      });
+      const inputsRow = el('div', { class: 'cle-row-inputs' });
+      inputsRow.appendChild(nb); inputsRow.appendChild(num); inputsRow.appendChild(obs); inputsRow.appendChild(del);
+      row.appendChild(inputsRow);
+      if (!c.photos) c.photos = [];
+      row.appendChild(buildPhotoWidget(c.photos, () => markDirty()));
       clesList.appendChild(row);
     });
   };
   renderCles();
   clesBox.appendChild(el('button', {
     class: 'btn btn-outline btn-sm', text: '+ Ajouter une clé',
-    on: { click: () => { CURRENT.cles.push({ nombre: '', numero: '', obs: '' }); markDirty(); renderCles(); } }
+    on: { click: () => { CURRENT.cles.push({ nombre: '', numero: '', obs: '', photos: [] }); markDirty(); renderCles(); } }
   }));
   content.appendChild(clesBox);
 
@@ -1931,6 +1948,7 @@ async function generatePDF(insp) {
   table(['Nombre', 'Numéro', 'Observations'],
     insp.cles.map(c => [c.nombre, c.numero, c.obs]),
     [70, 120, pageW - 2 * margin - 190]);
+  insp.cles.forEach(c => { if ((c.photos || []).length) photoRow(c.photos); });
 
   sectionTitle('Relevé des compteurs');
   table(['Type', 'Relevé', 'Date', 'Coupé', 'Observations'],
