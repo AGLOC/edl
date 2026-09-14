@@ -375,6 +375,9 @@ function fmtDate(d) {
 function fmtDateTime(d) {
   if (!d) return '';
   const dt = new Date(d);
+  if (isNaN(dt.getTime())) return '';
+  const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(d); // ancienne donnée sans heure (avant la mise à jour)
+  if (isDateOnly) return dt.toLocaleDateString('fr-FR', { timeZone: 'UTC' });
   return dt.toLocaleDateString('fr-FR') + ' à ' + dt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 }
 
