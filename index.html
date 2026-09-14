@@ -62,6 +62,7 @@ button, input, select, textarea { font-family: inherit; }
   border-bottom: 3px solid var(--gold);
 }
 .brand-logo { display: block; border-radius: 6px; flex-shrink: 0; }
+.dossier-preview { font-size: 12px; color: var(--subtle); margin-top: 4px; }
 .brand { font-size: 20px; font-weight: 700; letter-spacing: 0.5px; }
 .brand-compact { font-size: 16px; }
 .brand-a { color: var(--gold); }
@@ -371,6 +372,12 @@ function fmtDate(d) {
   return dt.toLocaleDateString('fr-FR');
 }
 
+function fmtDateTime(d) {
+  if (!d) return '';
+  const dt = new Date(d);
+  return dt.toLocaleDateString('fr-FR') + ' à ' + dt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+
 function compressImage(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -494,8 +501,30 @@ async function nextDossierNumber() {
   return 'AGLOC-' + year + '-' + String(seq).padStart(4, '0');
 }
 
+/* Numéro de dossier complet affiché = numéro généré + nom du propriétaire */
+function computeDossierLabel(insp) {
+  const propUpper = (insp.proprietaire || '').trim().toUpperCase();
+  return (insp.dossierNumero || '') + (propUpper ? ' - ' + propUpper : '');
+}
+
+function refreshDossierDisplay() {
+  if (!CURRENT) return;
+  CURRENT.dossier = computeDossierLabel(CURRENT);
+  if (DOSSIER_TITLE_SPAN) DOSSIER_TITLE_SPAN.textContent = CURRENT.dossier || 'Nouveau dossier';
+  if (DOSSIER_PREVIEW_EL) DOSSIER_PREVIEW_EL.textContent = CURRENT.dossier ? ('Dossier complet : ' + CURRENT.dossier) : '';
+}
+
 /* ---------- Stockage ---------- */
 const Store = {
+  async getTechniciens() {
+    try {
+      const r = await window.storage.get('techniciens:list', false);
+      return r ? JSON.parse(r.value) : [];
+    } catch (e) { return []; }
+  },
+  async saveTechniciens(list) {
+    await window.storage.set('techniciens:list', JSON.stringify(list), false);
+  },
   async getMandataires() {
     try {
       const r = await window.storage.get('mandataires:list', false);
@@ -571,15 +600,18 @@ function newInspection(type) {
   return {
     id: uid(),
     type: type, // 'entree' | 'sortie'
+    dossierNumero: '',
     dossier: '',
+    dateEdl: now.slice(0, 10),
     technicien: '',
     mandataire: null, // { id, nom, agence, telephone, email, adresse }
     proprietaire: '',
     bienType: 'Maison',
     bienPieces: '',
     bienAdresse: '',
-    entrantNom: '', entrantDate: '',
-    sortantNom: '', sortantDate: '',
+    entrantNom: '',
+    entrantDate: type === 'entree' ? now : '',
+    sortantDate: type === 'sortie' ? now : '',
     fournisseurTel: '', fournisseurGaz: '', fournisseurElec: '',
     cles: [{ nombre: '2', numero: '', obs: 'Porte d\'entrée' }],
     chauffage: [], ecs: [],
@@ -613,9 +645,13 @@ const App = document.getElementById('app');
 let CURRENT = null;           // inspection en cours d'édition
 let SAVE_STATUS = null;       // ref DOM au badge de sauvegarde
 let MANDATAIRES_CACHE = [];   // cache des mandataires/agences enregistrés
+let TECHNICIENS_CACHE = [];   // cache des techniciens enregistrés
+let DOSSIER_TITLE_SPAN = null; // ref DOM du n° de dossier affiché dans l'en-tête
+let DOSSIER_PREVIEW_EL = null; // ref DOM de l'aperçu du n° de dossier complet
 
 async function refreshMandataires() {
   MANDATAIRES_CACHE = await Store.getMandataires();
+  TECHNICIENS_CACHE = await Store.getTechniciens();
 }
 
 function simpleField(label, value, onInput, opts) {
@@ -706,15 +742,19 @@ async function duplicateInspection(id) {
   if (!src) return;
   const otherType = src.type === 'entree' ? 'sortie' : 'entree';
   const copy = newInspection(otherType);
-  copy.dossier = await nextDossierNumber();
+  copy.dossierNumero = await nextDossierNumber();
   copy.mandataire = src.mandataire ? { ...src.mandataire } : null;
+  copy.technicien = src.technicien;
   copy.proprietaire = src.proprietaire;
+  copy.dateEdl = new Date().toISOString().slice(0, 10);
   copy.bienType = src.bienType;
   copy.bienPieces = src.bienPieces;
   copy.bienAdresse = src.bienAdresse;
+  copy.entrantNom = src.entrantNom;
   copy.fournisseurTel = src.fournisseurTel;
   copy.fournisseurGaz = src.fournisseurGaz;
   copy.fournisseurElec = src.fournisseurElec;
+  copy.dossier = computeDossierLabel(copy);
   copy.cles = JSON.parse(JSON.stringify(src.cles || []));
   copy.chauffage = [...(src.chauffage || [])];
   copy.ecs = [...(src.ecs || [])];
@@ -728,7 +768,8 @@ async function duplicateInspection(id) {
 
 async function openNewInspectionForm(type) {
   const insp = newInspection(type);
-  insp.dossier = await nextDossierNumber();
+  insp.dossierNumero = await nextDossierNumber();
+  insp.dossier = computeDossierLabel(insp);
   CURRENT = insp;
   await Store.saveInspection(insp);
   renderEditor('general');
@@ -762,7 +803,8 @@ async function renderEditor(activeTab) {
   header.appendChild(el('div', { class: 'brand brand-compact', html: '<span class="brand-a">AG</span>LOC' }));
   const titleBox = el('div', { class: 'insp-header-title' });
   titleBox.appendChild(el('span', { class: 'tag tag-' + CURRENT.type, text: typeLabel }));
-  titleBox.appendChild(el('span', { text: CURRENT.dossier || 'Nouveau dossier' }));
+  DOSSIER_TITLE_SPAN = el('span', { text: CURRENT.dossier || 'Nouveau dossier' });
+  titleBox.appendChild(DOSSIER_TITLE_SPAN);
   header.appendChild(titleBox);
   SAVE_STATUS = el('div', { class: 'save-status', text: 'Enregistré ✓' });
   header.appendChild(SAVE_STATUS);
@@ -801,26 +843,41 @@ function field(label, value, onInput, opts) {
   return wrap;
 }
 
+function readOnlyField(label, displayValue) {
+  const wrap = el('div', { class: 'field' });
+  wrap.appendChild(el('label', { text: label }));
+  const input = el('input', { attrs: { type: 'text', disabled: 'disabled' } });
+  input.value = displayValue || '—';
+  wrap.appendChild(input);
+  return wrap;
+}
+
 function buildDossierField() {
   const wrap = el('div', { class: 'field' });
   wrap.appendChild(el('label', { text: 'Numéro de dossier (généré automatiquement)' }));
   const row = el('div', { class: 'dossier-row' });
   const input = el('input', { attrs: { type: 'text' } });
-  input.value = CURRENT.dossier || '';
-  input.addEventListener('input', () => { CURRENT.dossier = input.value; markDirty(); });
+  input.value = CURRENT.dossierNumero || '';
+  input.addEventListener('input', () => { CURRENT.dossierNumero = input.value; refreshDossierDisplay(); markDirty(); });
   const regen = el('button', {
     class: 'btn btn-ghost btn-sm', text: '↻ Nouveau n°',
     attrs: { title: 'Générer un nouveau numéro de dossier' },
     on: {
       click: async () => {
-        CURRENT.dossier = await nextDossierNumber();
-        input.value = CURRENT.dossier;
+        CURRENT.dossierNumero = await nextDossierNumber();
+        input.value = CURRENT.dossierNumero;
+        refreshDossierDisplay();
         markDirty();
       }
     }
   });
   row.appendChild(input); row.appendChild(regen);
   wrap.appendChild(row);
+  DOSSIER_PREVIEW_EL = el('div', {
+    class: 'dossier-preview',
+    text: CURRENT.dossier ? ('Dossier complet : ' + CURRENT.dossier) : ''
+  });
+  wrap.appendChild(DOSSIER_PREVIEW_EL);
   return wrap;
 }
 
@@ -868,6 +925,65 @@ function buildBienTypeSelector() {
   wrap.appendChild(select);
   wrap.appendChild(autreInput);
   return wrap;
+}
+
+function buildTechnicienSelector() {
+  const wrap = el('div', { class: 'field' });
+  wrap.appendChild(el('label', { text: 'Technicien' }));
+  const select = el('select');
+  const emptyOpt = el('option', { text: '— Sélectionner un technicien —' }); emptyOpt.value = '';
+  select.appendChild(emptyOpt);
+  TECHNICIENS_CACHE.forEach(nom => {
+    const o = el('option', { text: nom }); o.value = nom;
+    if (CURRENT.technicien === nom) o.selected = true;
+    select.appendChild(o);
+  });
+  const addOpt = el('option', { text: '+ Nouveau technicien…' }); addOpt.value = '__new__';
+  select.appendChild(addOpt);
+  select.addEventListener('change', () => {
+    if (select.value === '__new__') {
+      select.value = CURRENT.technicien || '';
+      openTechnicienQuickAdd(nom => {
+        CURRENT.technicien = nom;
+        markDirty();
+        renderEditor('general');
+      });
+      return;
+    }
+    CURRENT.technicien = select.value;
+    markDirty();
+  });
+  wrap.appendChild(select);
+  return wrap;
+}
+
+function openTechnicienQuickAdd(onCreated) {
+  const overlay = el('div', { class: 'modal-overlay' });
+  const box = el('div', { class: 'modal-box' });
+  box.appendChild(el('h3', { class: 'box-title', text: 'Nouveau technicien' }));
+  const data = { nom: '' };
+  const grid = el('div', { class: 'form-grid' });
+  grid.appendChild(simpleField('Nom du technicien', '', v => data.nom = v, { wide: true }));
+  box.appendChild(grid);
+  const actions = el('div', { class: 'modal-actions' });
+  actions.appendChild(el('button', { class: 'btn btn-ghost btn-sm', text: 'Annuler', on: { click: () => overlay.remove() } }));
+  actions.appendChild(el('button', {
+    class: 'btn btn-primary btn-sm', text: 'Enregistrer',
+    on: {
+      click: async () => {
+        if (!data.nom.trim()) { alert('Le nom est obligatoire.'); return; }
+        const list = await Store.getTechniciens();
+        if (!list.includes(data.nom.trim())) list.push(data.nom.trim());
+        await Store.saveTechniciens(list);
+        TECHNICIENS_CACHE = list;
+        overlay.remove();
+        onCreated(data.nom.trim());
+      }
+    }
+  }));
+  box.appendChild(actions);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
 }
 
 function buildMandataireSelector() {
@@ -1024,26 +1140,27 @@ function buildMandataireCard(m) {
 function buildGeneralTab(content) {
   const grid = el('div', { class: 'form-grid' });
   grid.appendChild(buildDossierField());
-  grid.appendChild(field('Technicien', CURRENT.technicien, v => CURRENT.technicien = v));
+  grid.appendChild(buildTechnicienSelector());
   grid.appendChild(buildMandataireSelector());
-  grid.appendChild(field('Propriétaire', CURRENT.proprietaire, v => CURRENT.proprietaire = v));
-  grid.appendChild(buildBienTypeSelector());
-  grid.appendChild(field('Nombre de pièces', CURRENT.bienPieces, v => CURRENT.bienPieces = v));
-  grid.appendChild(field('Adresse du bien', CURRENT.bienAdresse, v => CURRENT.bienAdresse = v, { wide: true }));
+  const propField = field('Propriétaire', CURRENT.proprietaire, v => { CURRENT.proprietaire = v; refreshDossierDisplay(); });
+  grid.appendChild(propField);
+  grid.appendChild(field('Date', CURRENT.dateEdl, v => CURRENT.dateEdl = v, { type: 'date' }));
   content.appendChild(sectionBox('Informations générales', grid));
 
-  const grid2 = el('div', { class: 'form-grid' });
-  grid2.appendChild(field('Locataire entrant — nom', CURRENT.entrantNom, v => CURRENT.entrantNom = v));
-  grid2.appendChild(field('Locataire entrant — date d\'entrée', CURRENT.entrantDate, v => CURRENT.entrantDate = v, { type: 'date' }));
-  grid2.appendChild(field('Locataire sortant — nom', CURRENT.sortantNom, v => CURRENT.sortantNom = v));
-  grid2.appendChild(field('Locataire sortant — date de sortie', CURRENT.sortantDate, v => CURRENT.sortantDate = v, { type: 'date' }));
-  content.appendChild(sectionBox('Locataires', grid2));
+  const gridBien = el('div', { class: 'form-grid' });
+  gridBien.appendChild(buildBienTypeSelector());
+  gridBien.appendChild(field('Nombre de pièces', CURRENT.bienPieces, v => CURRENT.bienPieces = v));
+  gridBien.appendChild(field('Adresse du bien', CURRENT.bienAdresse, v => CURRENT.bienAdresse = v, { wide: true }));
+  content.appendChild(sectionBox('Informations sur le bien', gridBien));
 
-  const grid3 = el('div', { class: 'form-grid' });
-  grid3.appendChild(field('Fournisseur ligne téléphonique', CURRENT.fournisseurTel, v => CURRENT.fournisseurTel = v));
-  grid3.appendChild(field('Fournisseur de gaz', CURRENT.fournisseurGaz, v => CURRENT.fournisseurGaz = v));
-  grid3.appendChild(field('Fournisseur d\'électricité', CURRENT.fournisseurElec, v => CURRENT.fournisseurElec = v));
-  content.appendChild(sectionBox('Fournisseurs', grid3));
+  const grid2 = el('div', { class: 'form-grid' });
+  if (CURRENT.type === 'entree') {
+    grid2.appendChild(readOnlyField('Date et heure d\'entrée', fmtDateTime(CURRENT.entrantDate)));
+    grid2.appendChild(field('Nom & prénom locataire', CURRENT.entrantNom, v => CURRENT.entrantNom = v));
+  } else {
+    grid2.appendChild(readOnlyField('Date et heure de sortie', fmtDateTime(CURRENT.sortantDate)));
+  }
+  content.appendChild(sectionBox('Locataires', grid2));
 }
 
 function sectionBox(title, inner) {
@@ -1085,6 +1202,15 @@ function buildClesTab(content) {
   meterBox.appendChild(el('h3', { class: 'box-title', text: 'Relevé des compteurs' }));
   CURRENT.compteurs.forEach(m => meterBox.appendChild(buildMeterRow(m)));
   content.appendChild(meterBox);
+
+  const fournBox = el('div', { class: 'box' });
+  fournBox.appendChild(el('h3', { class: 'box-title', text: 'Fournisseurs' }));
+  const gridFourn = el('div', { class: 'form-grid' });
+  gridFourn.appendChild(field('Fournisseur ligne téléphonique', CURRENT.fournisseurTel, v => CURRENT.fournisseurTel = v));
+  gridFourn.appendChild(field('Fournisseur de gaz', CURRENT.fournisseurGaz, v => CURRENT.fournisseurGaz = v));
+  gridFourn.appendChild(field('Fournisseur d\'électricité', CURRENT.fournisseurElec, v => CURRENT.fournisseurElec = v));
+  fournBox.appendChild(gridFourn);
+  content.appendChild(fournBox);
 }
 
 function buildMeterRow(m) {
@@ -1774,25 +1900,29 @@ async function generatePDF(insp) {
   sectionTitle('Informations générales');
   rowPairs([
     ['Numéro de dossier', insp.dossier],
-    ['Date', fmtDate(insp.updatedAt)],
+    ['Date', insp.dateEdl ? fmtDate(insp.dateEdl) : fmtDate(insp.updatedAt)],
     ['Technicien', insp.technicien],
     ['Mandataire', mandataireStr],
     ['Propriétaire', insp.proprietaire],
+  ]);
+
+  sectionTitle('Informations sur le bien');
+  rowPairs([
     ['Type de bien', insp.bienType + (insp.bienPieces ? ' — ' + insp.bienPieces + ' pièce(s)' : '')],
     ['Adresse', insp.bienAdresse],
   ]);
 
   sectionTitle('Locataires');
-  rowPairs([
-    ['Entrant', insp.entrantNom], ['Date d\'entrée', insp.entrantDate ? fmtDate(insp.entrantDate) : ''],
-    ['Sortant', insp.sortantNom], ['Date de sortie', insp.sortantDate ? fmtDate(insp.sortantDate) : ''],
-  ]);
-
-  sectionTitle('Fournisseurs');
-  rowPairs([
-    ['Ligne téléphonique', insp.fournisseurTel], ['Gaz', insp.fournisseurGaz],
-    ['Électricité', insp.fournisseurElec], ['', ''],
-  ]);
+  if (insp.type === 'entree') {
+    rowPairs([
+      ['Nom & prénom locataire', insp.entrantNom],
+      ['Date et heure d\'entrée', insp.entrantDate ? fmtDateTime(insp.entrantDate) : ''],
+    ]);
+  } else {
+    rowPairs([
+      ['Date et heure de sortie', insp.sortantDate ? fmtDateTime(insp.sortantDate) : ''],
+    ]);
+  }
 
   sectionTitle('Clés remises');
   table(['Nombre', 'Numéro', 'Observations'],
@@ -1804,6 +1934,12 @@ async function generatePDF(insp) {
     insp.compteurs.map(m => [m.type, m.releve, m.date, m.coupe, m.obs]),
     [150, 70, 65, 45, pageW - 2 * margin - 330]);
   insp.compteurs.forEach(m => { if ((m.photos || []).length) photoRow(m.photos); });
+
+  sectionTitle('Fournisseurs');
+  rowPairs([
+    ['Ligne téléphonique', insp.fournisseurTel], ['Gaz', insp.fournisseurGaz],
+    ['Électricité', insp.fournisseurElec], ['', ''],
+  ]);
 
   sectionTitle('Type de chauffage');
   checklistLine(CHAUFFAGE_OPTIONS, insp.chauffage);
@@ -1871,7 +2007,7 @@ async function generatePDF(insp) {
 
   const sigKeys = insp.type === 'entree'
     ? [['entrant', 'Locataire entrant', insp.entrantNom], ['proprietaire', 'Propriétaire / mandataire', insp.proprietaire]]
-    : [['sortant', 'Locataire sortant', insp.sortantNom], ['entrant', 'Locataire entrant', insp.entrantNom], ['proprietaire', 'Propriétaire / mandataire', insp.proprietaire]];
+    : [['sortant', 'Locataire sortant', insp.entrantNom], ['entrant', 'Locataire entrant', insp.entrantNom], ['proprietaire', 'Propriétaire / mandataire', insp.proprietaire]];
 
   const boxW = (pageW - 2 * margin - (sigKeys.length - 1) * 16) / sigKeys.length;
   const boxH = 130;
