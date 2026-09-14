@@ -411,88 +411,161 @@ function compressImage(file) {
   });
 }
 
-/* ---------- Polyfill de stockage (autonome hors Claude) ----------
+/* ---------- Stockage partagé (autonome hors Claude) ----------
    Si l'appli tourne dans l'environnement Claude, window.storage existe déjà.
-   Sinon (GitHub Pages, ouverture locale, PWA installée...), on simule la
-   même API (get/set/delete) avec IndexedDB, adapté au volume des photos. */
+   Sinon (GitHub Pages, ouverture locale, PWA installée...) :
+   - si FIREBASE_CONFIG est rempli ci-dessous, on utilise Firebase Firestore
+     (données partagées et synchronisées en temps réel entre tous les appareils) ;
+   - sinon, on retombe sur IndexedDB (stockage local à cet appareil uniquement). */
 (function () {
   if (window.storage && typeof window.storage.get === 'function') return; // déjà présent (Claude)
 
-  const DB_NAME = 'aglocEdlDB';
-  const STORE = 'kv';
-  let dbPromise = null;
+  /* ⚠️ À remplir avec la configuration de votre projet Firebase (voir Project settings
+     → General → Your apps → objet firebaseConfig). Tant que apiKey est vide, l'appli
+     fonctionne en stockage local (IndexedDB), sans synchronisation entre appareils. */
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyCpmetPQ8-S59r8nkbFRUCWLeSKMn0KCeM",
+    authDomain: "agloc-edl.firebaseapp.com",
+    projectId: "agloc-edl",
+    storageBucket: "agloc-edl.firebasestorage.app",
+    messagingSenderId: "905072085291",
+    appId: "1:905072085291:web:75c62ddd142fdb14135d6e"
+  };
 
-  function openDB() {
-    if (dbPromise) return dbPromise;
-    dbPromise = new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, 1);
-      req.onupgradeneeded = () => {
-        req.result.createObjectStore(STORE);
-      };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-    return dbPromise;
-  }
+  /* ---- Stockage local (IndexedDB), utilisé si Firebase n'est pas configuré ---- */
+  function buildIndexedDBStorage() {
+    const DB_NAME = 'aglocEdlDB';
+    const STORE = 'kv';
+    let dbPromise = null;
 
-  async function idbGet(key) {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, 'readonly');
-      const req = tx.objectStore(STORE).get(key);
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-  }
-
-  async function idbSet(key, value) {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, 'readwrite');
-      tx.objectStore(STORE).put(value, key);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-  }
-
-  async function idbDelete(key) {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, 'readwrite');
-      tx.objectStore(STORE).delete(key);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-  }
-
-  window.storage = {
-    async get(key /*, shared */) {
-      const value = await idbGet(key);
-      if (value === undefined) return null;
-      return { key, value, shared: false };
-    },
-    async set(key, value /*, shared */) {
-      await idbSet(key, value);
-      return { key, value, shared: false };
-    },
-    async delete(key /*, shared */) {
-      await idbDelete(key);
-      return { key, deleted: true, shared: false };
-    },
-    async list(prefix /*, shared */) {
+    function openDB() {
+      if (dbPromise) return dbPromise;
+      dbPromise = new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = () => { req.result.createObjectStore(STORE); };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      return dbPromise;
+    }
+    async function idbGet(key) {
       const db = await openDB();
       return new Promise((resolve, reject) => {
         const tx = db.transaction(STORE, 'readonly');
-        const req = tx.objectStore(STORE).getAllKeys();
-        req.onsuccess = () => {
-          let keys = req.result;
-          if (prefix) keys = keys.filter(k => String(k).startsWith(prefix));
-          resolve({ keys, prefix, shared: false });
-        };
+        const req = tx.objectStore(STORE).get(key);
+        req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
       });
     }
-  };
+    async function idbSet(key, value) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, 'readwrite');
+        tx.objectStore(STORE).put(value, key);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+    async function idbDelete(key) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, 'readwrite');
+        tx.objectStore(STORE).delete(key);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+    return {
+      async get(key) {
+        const value = await idbGet(key);
+        if (value === undefined) return null;
+        return { key, value, shared: false };
+      },
+      async set(key, value) {
+        await idbSet(key, value);
+        return { key, value, shared: false };
+      },
+      async delete(key) {
+        await idbDelete(key);
+        return { key, deleted: true, shared: false };
+      },
+      async list(prefix) {
+        const db = await openDB();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE, 'readonly');
+          const req = tx.objectStore(STORE).getAllKeys();
+          req.onsuccess = () => {
+            let keys = req.result;
+            if (prefix) keys = keys.filter(k => String(k).startsWith(prefix));
+            resolve({ keys, prefix, shared: false });
+          };
+          req.onerror = () => reject(req.error);
+        });
+      }
+    };
+  }
+
+  /* ---- Stockage partagé (Firebase Firestore), synchronisé entre tous les appareils ---- */
+  function buildFirebaseStorage(config) {
+    const SDK = 'https://www.gstatic.com/firebasejs/10.13.0/';
+    let readyPromise = null;
+
+    function ready() {
+      if (!readyPromise) {
+        readyPromise = (async () => {
+          const [appMod, fsMod, authMod] = await Promise.all([
+            import(SDK + 'firebase-app.js'),
+            import(SDK + 'firebase-firestore.js'),
+            import(SDK + 'firebase-auth.js')
+          ]);
+          const app = appMod.initializeApp(config);
+          const db = fsMod.getFirestore(app);
+          try { await fsMod.enableIndexedDbPersistence(db); } catch (e) { /* mode hors-ligne non critique */ }
+          const auth = authMod.getAuth(app);
+          await new Promise((resolve, reject) => {
+            authMod.onAuthStateChanged(auth, (user) => { if (user) resolve(user); }, reject);
+            authMod.signInAnonymously(auth).catch(reject);
+          });
+          return { db, fs: fsMod };
+        })();
+      }
+      return readyPromise;
+    }
+
+    return {
+      async get(key) {
+        const { db, fs } = await ready();
+        const snap = await fs.getDoc(fs.doc(db, 'kv', key));
+        if (!snap.exists()) return null;
+        return { key, value: snap.data().value, shared: true };
+      },
+      async set(key, value) {
+        const { db, fs } = await ready();
+        await fs.setDoc(fs.doc(db, 'kv', key), { value: value, updatedAt: Date.now() });
+        return { key, value, shared: true };
+      },
+      async delete(key) {
+        const { db, fs } = await ready();
+        await fs.deleteDoc(fs.doc(db, 'kv', key));
+        return { key, deleted: true, shared: true };
+      },
+      async list(prefix) {
+        const { db, fs } = await ready();
+        const col = fs.collection(db, 'kv');
+        const q = prefix
+          ? fs.query(col, fs.where(fs.documentId(), '>=', prefix), fs.where(fs.documentId(), '<', prefix + '\uf8ff'))
+          : col;
+        const snaps = await fs.getDocs(q);
+        const keys = [];
+        snaps.forEach(d => keys.push(d.id));
+        return { keys, prefix, shared: true };
+      }
+    };
+  }
+
+  window.storage = FIREBASE_CONFIG.apiKey
+    ? buildFirebaseStorage(FIREBASE_CONFIG)
+    : buildIndexedDBStorage();
 })();
 
 /* ---------- Numérotation automatique des dossiers ---------- */
