@@ -2409,6 +2409,84 @@ async function generatePDF(insp) {
   });
   state.y += boxH + 20;
 
+  /* ---------------- Conditions générales ---------------- */
+  newPage();
+  sectionTitle('Conditions générales');
+
+  function cgvP(text, opts) {
+    opts = opts || {};
+    doc.setFont('helvetica', opts.bold ? 'bold' : 'normal');
+    doc.setFontSize(opts.size || 8);
+    doc.setTextColor(NAVY[0], NAVY[1], NAVY[2]);
+    const lines = doc.splitTextToSize(text, pageW - 2 * margin - (opts.indent || 0));
+    const lineH = 9.5;
+    lines.forEach(line => {
+      ensureSpace(lineH);
+      doc.text(line, margin + (opts.indent || 0), state.y);
+      state.y += lineH;
+    });
+    state.y += opts.gap !== undefined ? opts.gap : 6;
+  }
+
+  cgvP("Le présent état des lieux a été établi par la société AGLOCATION, Société par actions simplifiée immatriculée au Registre du Commerce et des Sociétés de La Roche-sur-Yon sous le numéro 107 230 351 R.C.S. La Roche-sur-Yon (SIRET 107 230 351 00010), dont le siège social est situé 13 Rue de Prévôté – 85670 Palluau.");
+
+  cgvP("La société AGLOCATION présente toutes les garanties d'indépendance lui permettant de réaliser le présent état des lieux en parfaite objectivité, de manière contradictoire et amiable avec le preneur ou son représentant lors de la remise ou de la restitution des clés.");
+
+  cgvP("Le bailleur et le preneur, ou leur représentant, déclarent que le procédé photographique mis en œuvre par la société AGLOCATION pour l'établissement du présent état des lieux permet une transcription sincère et exacte de l'apparence des lieux visités. Les Parties acceptent et reconnaissent que l'absence de mention portée une photographie figurant à l'état des lieux signifie de manière claire et non équivoque que l'élément représenté est NEUF ou en BON ÉTAT. Tout élément qui ne correspondrait pas à un état NEUF ou en BON ÉTAT ou tout autre fait notable sur l'état des lieux fera l'objet d'une mention expresse de la part de la société AGLOCATION.");
+
+  cgvP("Pour l'établissement de l'état des lieux, les parties acceptent et reconnaissent la définition des termes suivants :", { gap: 4 });
+  [
+    'Neuf : état neuf',
+    'Bon état : répond à son état d\'usage',
+    'État moyen : nécessite un entretien',
+    'Mauvais état : nécessite un remplacement',
+    'Dégradé : nécessite une réparation',
+  ].forEach(t => cgvP('•  ' + t, { indent: 8, gap: 2 }));
+  state.y += 6;
+
+  cgvP("Dans le cadre de l'état des lieux de sortie, la société AGLOCATION remet au mandataire et/ou au propriétaire un récapitulatif des constatations effectuées ainsi que ses recommandations concernant les travaux d'entretien ou de réparation qu'elle estime nécessaires. Ces recommandations sont fournies à titre indicatif, sur la base des seules constatations visuelles réalisées le jour de l'état des lieux, et ne sauraient engager la responsabilité de la société AGLOCATION quant à leur mise en œuvre, laquelle relève de la seule décision du bailleur.");
+
+  cgvP("Les Parties reconnaissent que la société AGLOCATION ne saurait être tenue responsable de l'absence de constatations portant sur des éléments dans les lieux non visibles ou dissimulés par des objets fixes, lourds ou imposants.");
+
+  cgvP("L'état des lieux est dressé contradictoirement par la société AGLOCATION sur un support numérique. Le Preneur a la faculté de revoir intégralement l'état des lieux sur le support numérique mis à sa disposition et de solliciter toutes modifications qu'il jugerait utile avant de signer le document de manière électronique.");
+
+  cgvP("Le bailleur et le preneur reconnaissent que le présent état des lieux a été réalisé conformément aux dispositions de l'article 3-2 de la loi n°89-462 du 6 juillet 1989 tendant à améliorer les rapports locatifs et portant modification de la loi n°86-1290 du 23 décembre 1986.");
+
+  cgvP("Les parties déclarent être parfaitement informées qu'aux termes de ces dispositions :", { gap: 4 });
+  cgvP("Le locataire est en droit de demander au bailleur ou à son représentant de compléter l'état des lieux d'entrée dans un délai de dix jours à compter de son établissement. Si cette demande est refusée, le locataire peut saisir la commission départementale de conciliation territorialement compétente.");
+  cgvP("Pendant le premier mois de la période de chauffe, le locataire peut demander que l'état des lieux soit complété par l'état et le fonctionnement des éléments de chauffage.");
+  cgvP("Le propriétaire ou son mandataire complète les états des lieux d'entrée et de sortie par les relevés des index pour chaque énergie, en présence d'une installation de chauffage ou d'eau chaude sanitaire individuelle, ou collective avec un comptage individuel.");
+
+  cgvP("Il est encore parfaitement admis par le bailleur et le preneur que le présent état des lieux a été dressé en parfait respect avec les termes du Décret n°2016-382 du 30 mars 2016 fixant les modalités d'établissement de l'état des lieux et de prise en compte de la vétusté des logements loués à usage de résidence principale et notamment de son article 2, lequel stipule que :");
+
+  cgvP("« L'état des lieux décrit le logement et constate son état de conservation. Il comporte au moins les informations suivantes :", { gap: 4 });
+
+  cgvP("I. À l'entrée et à la sortie du logement :", { bold: true, gap: 4 });
+  [
+    '1. Le type d\'état des lieux : d\'entrée ou de sortie ;',
+    '2. Sa date d\'établissement ;',
+    '3. La localisation du logement ;',
+    '4. Le nom ou la dénomination des parties et le domicile ou le siège social du bailleur ;',
+    '5. Le cas échéant, le nom ou la dénomination et le domicile ou le siège social des personnes mandatées pour réaliser l\'état des lieux ;',
+    '6. Le cas échéant, les relevés des compteurs individuels de consommation d\'eau ou d\'énergie ;',
+    '7. Le détail et la destination des clés ou de tout autre moyen d\'accès aux locaux à usage privatif ou commun ;',
+    '8. Pour chaque pièce et partie du logement, la description précise de l\'état des revêtements des sols, murs et plafonds, des équipements et des éléments du logement. Il peut être complété d\'observations ou de réserves et illustré d\'images ;',
+    '9. La signature des parties ou des personnes mandatées pour réaliser l\'état des lieux ;',
+  ].forEach(t => cgvP(t, { indent: 10, gap: 3 }));
+  state.y += 4;
+
+  cgvP("II. À la sortie du logement :", { bold: true, gap: 4 });
+  [
+    '1. L\'adresse du nouveau domicile ou du lieu d\'hébergement du locataire ;',
+    '2. La date de réalisation de l\'état des lieux d\'entrée (si cette dernière est communiquée par l\'une des parties) ;',
+    '3. Éventuellement, les évolutions de l\'état de chaque pièce et partie du logement constatées depuis l\'établissement de l\'état des lieux d\'entrée. »',
+  ].forEach(t => cgvP(t, { indent: 10, gap: 3 }));
+  state.y += 4;
+
+  cgvP("L'état des lieux est établi sur support numérique, et est remis en autant d'exemplaires que de parties.");
+
+  cgvP("Les informations et données recueillies lors de l'état des lieux assuré par la société AGLOCATION pourront être conservées sur support dématérialisé pendant une durée maximale de trois ans. La société AGLOCATION reconnaît que la conservation de ces informations ne pourra excéder ce délai et que toutes les mesures techniques et organisationnelles seront prises par elle pour assurer un archivage sécurisé, et en accès restreint, en conformité avec les obligations en matière de protection des données personnelles issues du Règlement de l'Union européenne n°2016/679 dit RGPD.", { gap: 0 });
+
   const filename = 'EDL_' + (insp.type === 'entree' ? 'Entree' : 'Sortie') + '_' +
     (insp.dossier ? insp.dossier.replace(/[^a-zA-Z0-9_-]+/g, '_') : insp.id) + '.pdf';
   doc.save(filename);
