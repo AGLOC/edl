@@ -174,6 +174,9 @@ button, input, select, textarea { font-family: inherit; }
 .meter-inputs input, .meter-inputs select {
   border: 1.5px solid var(--border); border-radius: 7px; padding: 8px; font-size: 13px; width: 100%;
 }
+.meter-releve-group { display: flex; align-items: center; gap: 6px; }
+.meter-releve-group input { flex: 1; min-width: 0; }
+.meter-unit { font-size: 12px; color: var(--subtle); font-weight: 600; white-space: nowrap; }
 
 /* ---------- Checkbox grid ---------- */
 .checkbox-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -339,7 +342,7 @@ const ROOM_PRESETS = {
 };
 
 const METER_TYPES = ['Électricité HC Saison Basse', 'Électricité HP Saison Basse', 'Électricité HC Saison Haute',
-  'Électricité HP Saison Haute', 'Électricité PRM', 'Eau froide', 'Eau chaude', 'Gaz', 'Fibre'];
+  'Électricité HP Saison Haute', 'Électricité PRM', 'Eau froide', 'Gaz', 'Fibre'];
 
 /* ---------- Utilitaires ---------- */
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
@@ -1386,6 +1389,11 @@ function buildClesTab(content) {
   content.appendChild(fournBox);
 }
 
+function meterUnit(type) {
+  return ['Électricité HC Saison Basse', 'Électricité HP Saison Basse', 'Électricité HC Saison Haute', 'Électricité HP Saison Haute'].includes(type)
+    ? 'kWh' : '';
+}
+
 function buildMeterRow(m) {
   const row = el('div', { class: 'meter-row' });
   row.appendChild(el('div', { class: 'meter-type', text: m.type }));
@@ -1398,7 +1406,16 @@ function buildMeterRow(m) {
   const obs = el('input', { attrs: { type: 'text', placeholder: 'Observations' } }); obs.value = m.obs;
   obs.addEventListener('input', () => { m.obs = obs.value; markDirty(); });
   const inputsWrap = el('div', { class: 'meter-inputs' });
-  inputsWrap.appendChild(releve); inputsWrap.appendChild(coupe); inputsWrap.appendChild(obs);
+  const unit = meterUnit(m.type);
+  if (unit) {
+    const releveGroup = el('div', { class: 'meter-releve-group' });
+    releveGroup.appendChild(releve);
+    releveGroup.appendChild(el('span', { class: 'meter-unit', text: unit }));
+    inputsWrap.appendChild(releveGroup);
+  } else {
+    inputsWrap.appendChild(releve);
+  }
+  inputsWrap.appendChild(coupe); inputsWrap.appendChild(obs);
   row.appendChild(inputsWrap);
   row.appendChild(buildPhotoWidget(m.photos, () => markDirty()));
   return row;
@@ -1858,26 +1875,40 @@ async function generatePDF(insp) {
     state.y += 30;
   }
 
-  function drawKV(x, label, value, maxW) {
+  function kvLines(label, value, maxW) {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
-    doc.setTextColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
     const labelTxt = label + ' : ';
-    doc.text(labelTxt, x, state.y);
     const lw = doc.getTextWidth(labelTxt);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
+    const lines = doc.splitTextToSize(String(value || '—'), Math.max(20, maxW - lw));
+    return { labelTxt, lw, lines };
+  }
+
+  function drawKVLines(x, kv) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
+    doc.text(kv.labelTxt, x, state.y);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
     doc.setTextColor(NAVY[0], NAVY[1], NAVY[2]);
-    doc.text(String(value || '—'), x + lw, state.y, { maxWidth: Math.max(20, maxW - lw) });
+    doc.text(kv.lines, x + kv.lw, state.y);
   }
 
   function rowPairs(pairs) {
     const half = (pageW - 2 * margin) / 2;
+    const lineH = 12;
     for (let i = 0; i < pairs.length; i += 2) {
-      ensureSpace(16);
-      drawKV(margin, pairs[i][0], pairs[i][1], half - 10);
-      if (pairs[i + 1]) drawKV(margin + half, pairs[i + 1][0], pairs[i + 1][1], half - 10);
-      state.y += 16;
+      const leftKV = kvLines(pairs[i][0], pairs[i][1], half - 10);
+      const rightKV = pairs[i + 1] ? kvLines(pairs[i + 1][0], pairs[i + 1][1], half - 10) : null;
+      const rowLines = Math.max(leftKV.lines.length, rightKV ? rightKV.lines.length : 1, 1);
+      const rowH = rowLines * lineH + 4;
+      ensureSpace(rowH);
+      drawKVLines(margin, leftKV);
+      if (rightKV) drawKVLines(margin + half, rightKV);
+      state.y += rowH;
     }
     state.y += 8;
   }
@@ -1944,7 +1975,7 @@ async function generatePDF(insp) {
     headers.forEach((h, i) => { doc.rect(x, state.y, colWidths[i], headerH, 'F'); doc.text(h, x + 4, state.y + 11); x += colWidths[i]; });
     state.y += headerH;
 
-    const thumbW = 68, thumbH = 51, gap = 4;
+    const thumbW = 95, thumbH = 71, gap = 4;
     const photoColIndex = colWidths.length - 1;
     const photoColX = margin + colWidths.slice(0, photoColIndex).reduce((a, b) => a + b, 0);
     const photoColW = colWidths[photoColIndex];
@@ -1952,8 +1983,18 @@ async function generatePDF(insp) {
 
     rows.forEach((r, ri) => {
       const photos = (photoIdsPerRow[ri] || []).map(pid => photoCache[pid]).filter(Boolean);
-      const lines = photos.length ? Math.ceil(photos.length / perLine) : 0;
-      const rowH = Math.max(18, lines * (thumbH + gap) + 6);
+      const photoLines = photos.length ? Math.ceil(photos.length / perLine) : 0;
+      const photosH = photoLines ? photoLines * (thumbH + gap) + 6 : 0;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      let textLines = 1;
+      r.forEach((cell, i) => {
+        const txt = String(cell === undefined || cell === null || cell === '' ? '—' : cell);
+        const wrapped = doc.splitTextToSize(txt, colWidths[i] - 8);
+        textLines = Math.max(textLines, wrapped.length);
+      });
+      const textH = textLines * 10 + 8;
+      const rowH = Math.max(18, textH, photosH);
       ensureSpace(rowH);
       x = margin;
       const fill = ri % 2 === 0 ? LIGHTBLUE : [255, 255, 255];
@@ -1964,7 +2005,9 @@ async function generatePDF(insp) {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8);
         doc.setTextColor(NAVY[0], NAVY[1], NAVY[2]);
-        doc.text(String(cell === undefined || cell === null || cell === '' ? '—' : cell), x + 4, state.y + 11, { maxWidth: colWidths[i] - 8 });
+        const txt = String(cell === undefined || cell === null || cell === '' ? '—' : cell);
+        const wrapped = doc.splitTextToSize(txt, colWidths[i] - 8);
+        doc.text(wrapped, x + 4, state.y + 11);
         x += colWidths[i];
       });
       doc.setFillColor(fill[0], fill[1], fill[2]);
@@ -1989,7 +2032,7 @@ async function generatePDF(insp) {
   function photoRow(photoIdsForRow) {
     const photos = (photoIdsForRow || []).map(pid => photoCache[pid]).filter(Boolean);
     if (!photos.length) return;
-    const thumbW = 130, thumbH = 96, gap = 6;
+    const thumbW = 170, thumbH = 126, gap = 6;
     let x = margin;
     ensureSpace(thumbH + 6);
     photos.forEach(durl => {
@@ -2004,10 +2047,10 @@ async function generatePDF(insp) {
   const ETAT_COLS = ['NEUF', 'BE', 'EM', 'ME', 'DEG'];
   const ETAT_LABELS = { NEUF: 'NEUF', BE: 'B.E', EM: 'E.M', ME: 'M.E', DEG: 'DEG' };
   const COL = {
-    critere: 90,
-    etat: 22,
-    nettoyage: 32,
-    photos: 118,
+    critere: 75,
+    etat: 18,
+    nettoyage: 26,
+    photos: 155,
   };
   COL.commentaire = (pageW - 2 * margin) - COL.critere - COL.etat * ETAT_COLS.length - COL.nettoyage - COL.photos;
 
@@ -2024,7 +2067,7 @@ async function generatePDF(insp) {
     x += COL.critere;
     ETAT_COLS.forEach(code => {
       doc.rect(x, state.y, COL.etat, rowH, 'F');
-      doc.setFontSize(6.5);
+      doc.setFontSize(6);
       doc.text(ETAT_LABELS[code], x + COL.etat / 2, state.y + 15, { align: 'center' });
       doc.setFontSize(7.5);
       x += COL.etat;
@@ -2053,7 +2096,7 @@ async function generatePDF(insp) {
     const commentLines = ligne.commentaire ? doc.splitTextToSize(ligne.commentaire, COL.commentaire - 10) : [];
 
     const photos = (ligne.photos || []).map(pid => photoCache[pid]).filter(Boolean);
-    const photoThumbW = 92, photoThumbH = 68, photoGap = 4;
+    const photoThumbW = 120, photoThumbH = 88, photoGap = 4;
     const photosPerLine = Math.max(1, Math.floor((COL.photos - 6) / (photoThumbW + photoGap)));
     const photoLines = photos.length ? Math.ceil(photos.length / photosPerLine) : 0;
     const photosH = photoLines ? photoLines * (photoThumbH + photoGap) + 8 : 0;
@@ -2182,10 +2225,12 @@ async function generatePDF(insp) {
   tableWithPhotos(
     ['Type', 'Relevé', 'Date', 'Observations', 'Photos'],
     insp.compteurs.map(m => [
-      m.type, m.releve, m.date,
+      m.type,
+      m.releve ? m.releve + (meterUnit(m.type) ? ' ' + meterUnit(m.type) : '') : '',
+      m.date,
       m.obs + (m.coupe === 'OUI' ? (m.obs ? ' — ' : '') + 'Coupé' : '')
     ]),
-    [130, 55, 55, 145, 130],
+    [95, 65, 45, 135, 175],
     insp.compteurs.map(m => m.photos || [])
   );
 
