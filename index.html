@@ -1840,6 +1840,18 @@ async function generatePDF(insp) {
     doc.rect(0, 60, pageW, 4, 'F');
   }
 
+  function drawHeaderCompact() {
+    const boxH = 34;
+    doc.setDrawColor(NAVY[0], NAVY[1], NAVY[2]);
+    doc.setLineWidth(1.1);
+    doc.rect(margin, 14, pageW - 2 * margin, boxH, 'S');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(NAVY[0], NAVY[1], NAVY[2]);
+    doc.text('Dossier ' + (insp.dossier || '—'), pageW / 2, 14 + boxH / 2 + 4, { align: 'center' });
+    state.y = 14 + boxH + 20;
+  }
+
   function drawFooter() {
     doc.setDrawColor(GOLD[0], GOLD[1], GOLD[2]);
     doc.setLineWidth(0.75);
@@ -1854,9 +1866,8 @@ async function generatePDF(insp) {
   function newPage() {
     doc.addPage();
     state.page += 1;
-    drawHeader();
+    drawHeaderCompact();
     drawFooter();
-    state.y = 84;
   }
 
   function ensureSpace(h) {
