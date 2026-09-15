@@ -2055,42 +2055,39 @@ async function generatePDF(insp) {
 
   /* ---- Table "Détails de l'état des lieux" (grille identique au modèle) ---- */
   const ETAT_COLS = ['NEUF', 'BE', 'EM', 'ME', 'DEG'];
-  const ETAT_LABELS = { NEUF: 'NEUF', BE: 'B.E', EM: 'E.M', ME: 'M.E', DEG: 'DEG' };
+  const ETAT_LABELS = { NEUF: 'Neuf', BE: 'B.E.', EM: 'E.M.', ME: 'M.E.', DEG: 'DEG' };
   const COL = {
-    critere: 75,
+    critere: 70,
     etat: 18,
-    nettoyage: 26,
-    photos: 155,
+    nettoyage: 40,
+    photos: 145,
   };
   COL.commentaire = (pageW - 2 * margin) - COL.critere - COL.etat * ETAT_COLS.length - COL.nettoyage - COL.photos;
 
   function etatTableHeader() {
     ensureSpace(30);
     let x = margin;
-    const rowH = 26;
+    const rowH = 28;
     doc.setFillColor(NAVY[0], NAVY[1], NAVY[2]);
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.5);
-    doc.rect(x, state.y, COL.critere, rowH, 'F');
-    doc.text('Critères', x + 5, state.y + 15);
-    x += COL.critere;
-    ETAT_COLS.forEach(code => {
-      doc.rect(x, state.y, COL.etat, rowH, 'F');
-      doc.setFontSize(6);
-      doc.text(ETAT_LABELS[code], x + COL.etat / 2, state.y + 15, { align: 'center' });
-      doc.setFontSize(7.5);
-      x += COL.etat;
-    });
-    doc.rect(x, state.y, COL.nettoyage, rowH, 'F');
-    doc.text('Nettoy.', x + COL.nettoyage / 2, state.y + 11, { align: 'center' });
-    doc.text('incompl.', x + COL.nettoyage / 2, state.y + 20, { align: 'center' });
-    x += COL.nettoyage;
-    doc.rect(x, state.y, COL.commentaire, rowH, 'F');
-    doc.text('Commentaires', x + 5, state.y + 15);
-    x += COL.commentaire;
-    doc.rect(x, state.y, COL.photos, rowH, 'F');
-    doc.text('Photos', x + COL.photos / 2, state.y + 15, { align: 'center' });
+
+    function headerCell(text, w, fontSize, align) {
+      doc.rect(x, state.y, w, rowH, 'F');
+      doc.setFontSize(fontSize);
+      const lines = doc.splitTextToSize(text, w - 6);
+      const lineH = fontSize + 1.5;
+      const startY = state.y + rowH / 2 - (lines.length - 1) * lineH / 2 + fontSize / 2.6;
+      if (align === 'center') doc.text(lines, x + w / 2, startY, { align: 'center' });
+      else doc.text(lines, x + 5, startY);
+      x += w;
+    }
+
+    headerCell('Critères', COL.critere, 7.5, 'left');
+    ETAT_COLS.forEach(code => headerCell(ETAT_LABELS[code], COL.etat, 6.5, 'center'));
+    headerCell('Nettoyage incomplet', COL.nettoyage, 6.5, 'center');
+    headerCell('Commentaires', COL.commentaire, 7.5, 'left');
+    headerCell('Photos', COL.photos, 7.5, 'center');
     state.y += rowH;
   }
 
@@ -2240,7 +2237,7 @@ async function generatePDF(insp) {
       m.date,
       m.obs + (m.coupe === 'OUI' ? (m.obs ? ' — ' : '') + 'Coupé' : '')
     ]),
-    [75, 65, 45, 155, 175],
+    [75, 65, 55, 145, 175],
     insp.compteurs.map(m => m.photos || [])
   );
 
