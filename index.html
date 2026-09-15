@@ -1944,7 +1944,7 @@ async function generatePDF(insp) {
     headers.forEach((h, i) => { doc.rect(x, state.y, colWidths[i], headerH, 'F'); doc.text(h, x + 4, state.y + 11); x += colWidths[i]; });
     state.y += headerH;
 
-    const thumbW = 34, thumbH = 26, gap = 4;
+    const thumbW = 44, thumbH = 33, gap = 4;
     const photoColIndex = colWidths.length - 1;
     const photoColX = margin + colWidths.slice(0, photoColIndex).reduce((a, b) => a + b, 0);
     const photoColW = colWidths[photoColIndex];
@@ -1989,7 +1989,7 @@ async function generatePDF(insp) {
   function photoRow(photoIdsForRow) {
     const photos = (photoIdsForRow || []).map(pid => photoCache[pid]).filter(Boolean);
     if (!photos.length) return;
-    const thumbW = 78, thumbH = 58, gap = 6;
+    const thumbW = 92, thumbH = 68, gap = 6;
     let x = margin;
     ensureSpace(thumbH + 6);
     photos.forEach(durl => {
@@ -2004,11 +2004,12 @@ async function generatePDF(insp) {
   const ETAT_COLS = ['NEUF', 'BE', 'EM', 'ME', 'DEG'];
   const ETAT_LABELS = { NEUF: 'NEUF', BE: 'B.E', EM: 'E.M', ME: 'M.E', DEG: 'DEG' };
   const COL = {
-    critere: 128,
-    etat: 30,
-    nettoyage: 46,
+    critere: 105,
+    etat: 26,
+    nettoyage: 38,
+    photos: 90,
   };
-  COL.commentaire = (pageW - 2 * margin) - COL.critere - COL.etat * ETAT_COLS.length - COL.nettoyage;
+  COL.commentaire = (pageW - 2 * margin) - COL.critere - COL.etat * ETAT_COLS.length - COL.nettoyage - COL.photos;
 
   function etatTableHeader() {
     ensureSpace(30);
@@ -2032,6 +2033,9 @@ async function generatePDF(insp) {
     x += COL.nettoyage;
     doc.rect(x, state.y, COL.commentaire, rowH, 'F');
     doc.text('Commentaires', x + 5, state.y + 15);
+    x += COL.commentaire;
+    doc.rect(x, state.y, COL.photos, rowH, 'F');
+    doc.text('Photos', x + COL.photos / 2, state.y + 15, { align: 'center' });
     state.y += rowH;
   }
 
@@ -2046,9 +2050,15 @@ async function generatePDF(insp) {
     doc.setFontSize(8);
     const commentLines = ligne.commentaire ? doc.splitTextToSize(ligne.commentaire, COL.commentaire - 10) : [];
 
+    const photos = (ligne.photos || []).map(pid => photoCache[pid]).filter(Boolean);
+    const photoThumbW = 44, photoThumbH = 33, photoGap = 4;
+    const photosPerLine = Math.max(1, Math.floor((COL.photos - 6) / (photoThumbW + photoGap)));
+    const photoLines = photos.length ? Math.ceil(photos.length / photosPerLine) : 0;
+    const photosH = photoLines ? photoLines * (photoThumbH + photoGap) + 8 : 0;
+
     const critereH = critereLines.length * 10 + substratLines.length * 9 + 10;
     const commentH = commentLines.length * 10 + 10;
-    const rowH = Math.max(24, critereH, commentH);
+    const rowH = Math.max(24, critereH, commentH, photosH);
 
     const pageBefore = state.page;
     ensureSpace(rowH + 4);
@@ -2106,13 +2116,23 @@ async function generatePDF(insp) {
       doc.setTextColor(NAVY[0], NAVY[1], NAVY[2]);
       doc.text(commentLines, x + 5, y0 + 12);
     }
+    x += COL.commentaire;
+
+    /* Photos */
+    doc.rect(x, y0, COL.photos, rowH, 'S');
+    if (photos.length) {
+      let px = x + 3, py = y0 + 4;
+      photos.forEach((durl, pi) => {
+        if (pi > 0 && pi % photosPerLine === 0) { px = x + 3; py += photoThumbH + photoGap; }
+        try { doc.addImage(durl, 'JPEG', px, py, photoThumbW, photoThumbH); } catch (e) { /* image invalide */ }
+        px += photoThumbW + photoGap;
+      });
+    } else {
+      doc.setFont('helvetica', 'italic'); doc.setFontSize(7.5); doc.setTextColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
+      doc.text('—', x + COL.photos / 2, y0 + rowH / 2 + 3, { align: 'center' });
+    }
 
     state.y = y0 + rowH;
-
-    if ((ligne.photos || []).length) {
-      state.y += 4;
-      photoRow(ligne.photos);
-    }
   }
 
   /* ---------------- construction du document ---------------- */
@@ -2163,7 +2183,7 @@ async function generatePDF(insp) {
       m.type, m.releve, m.date,
       m.obs + (m.coupe === 'OUI' ? (m.obs ? ' — ' : '') + 'Coupé' : '')
     ]),
-    [130, 55, 55, 165, 110],
+    [130, 55, 55, 145, 130],
     insp.compteurs.map(m => m.photos || [])
   );
 
