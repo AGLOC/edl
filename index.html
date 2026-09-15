@@ -177,6 +177,11 @@ button, input, select, textarea { font-family: inherit; }
 .meter-releve-group { display: flex; align-items: center; gap: 6px; }
 .meter-releve-group input { flex: 1; min-width: 0; }
 .meter-unit { font-size: 12px; color: var(--subtle); font-weight: 600; white-space: nowrap; }
+.meter-header {
+  display: grid; grid-template-columns: 1.2fr 0.8fr 2fr; gap: 8px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px;
+  color: var(--subtle); padding: 0 0 6px 0; border-bottom: 1.5px solid var(--border); margin-bottom: 8px;
+}
 
 /* ---------- Checkbox grid ---------- */
 .checkbox-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -1376,6 +1381,11 @@ function buildClesTab(content) {
 
   const meterBox = el('div', { class: 'box' });
   meterBox.appendChild(el('h3', { class: 'box-title', text: 'Relevé des compteurs' }));
+  const meterHeader = el('div', { class: 'meter-header' });
+  meterHeader.appendChild(el('span', { text: 'Relevé' }));
+  meterHeader.appendChild(el('span', { text: 'Coupé' }));
+  meterHeader.appendChild(el('span', { text: 'Observations' }));
+  meterBox.appendChild(meterHeader);
   CURRENT.compteurs.forEach(m => meterBox.appendChild(buildMeterRow(m)));
   content.appendChild(meterBox);
 
@@ -2230,7 +2240,7 @@ async function generatePDF(insp) {
       m.date,
       m.obs + (m.coupe === 'OUI' ? (m.obs ? ' — ' : '') + 'Coupé' : '')
     ]),
-    [95, 65, 45, 135, 175],
+    [75, 65, 45, 155, 175],
     insp.compteurs.map(m => m.photos || [])
   );
 
