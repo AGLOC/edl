@@ -1944,7 +1944,7 @@ async function generatePDF(insp) {
     headers.forEach((h, i) => { doc.rect(x, state.y, colWidths[i], headerH, 'F'); doc.text(h, x + 4, state.y + 11); x += colWidths[i]; });
     state.y += headerH;
 
-    const thumbW = 44, thumbH = 33, gap = 4;
+    const thumbW = 56, thumbH = 42, gap = 4;
     const photoColIndex = colWidths.length - 1;
     const photoColX = margin + colWidths.slice(0, photoColIndex).reduce((a, b) => a + b, 0);
     const photoColW = colWidths[photoColIndex];
@@ -1989,7 +1989,7 @@ async function generatePDF(insp) {
   function photoRow(photoIdsForRow) {
     const photos = (photoIdsForRow || []).map(pid => photoCache[pid]).filter(Boolean);
     if (!photos.length) return;
-    const thumbW = 92, thumbH = 68, gap = 6;
+    const thumbW = 110, thumbH = 82, gap = 6;
     let x = margin;
     ensureSpace(thumbH + 6);
     photos.forEach(durl => {
@@ -2004,10 +2004,10 @@ async function generatePDF(insp) {
   const ETAT_COLS = ['NEUF', 'BE', 'EM', 'ME', 'DEG'];
   const ETAT_LABELS = { NEUF: 'NEUF', BE: 'B.E', EM: 'E.M', ME: 'M.E', DEG: 'DEG' };
   const COL = {
-    critere: 105,
-    etat: 26,
-    nettoyage: 38,
-    photos: 90,
+    critere: 100,
+    etat: 25,
+    nettoyage: 36,
+    photos: 100,
   };
   COL.commentaire = (pageW - 2 * margin) - COL.critere - COL.etat * ETAT_COLS.length - COL.nettoyage - COL.photos;
 
@@ -2051,7 +2051,7 @@ async function generatePDF(insp) {
     const commentLines = ligne.commentaire ? doc.splitTextToSize(ligne.commentaire, COL.commentaire - 10) : [];
 
     const photos = (ligne.photos || []).map(pid => photoCache[pid]).filter(Boolean);
-    const photoThumbW = 44, photoThumbH = 33, photoGap = 4;
+    const photoThumbW = 70, photoThumbH = 52, photoGap = 4;
     const photosPerLine = Math.max(1, Math.floor((COL.photos - 6) / (photoThumbW + photoGap)));
     const photoLines = photos.length ? Math.ceil(photos.length / photosPerLine) : 0;
     const photosH = photoLines ? photoLines * (photoThumbH + photoGap) + 8 : 0;
