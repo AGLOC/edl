@@ -424,19 +424,13 @@ function compressImage(file) {
      → General → Your apps → objet firebaseConfig). Tant que apiKey est vide, l'appli
      fonctionne en stockage local (IndexedDB), sans synchronisation entre appareils. */
   const FIREBASE_CONFIG = {
-    apiKey: "",
-    authDomain: "",
-    projectId: "",
-    storageBucket: "",
-    messagingSenderId: "",
-    appId: ""
+    apiKey: "AIzaSyCpmetPQ8-S59r8nkbFRUCWLeSKMn0KCeM",
+    authDomain: "agloc-edl.firebaseapp.com",
+    projectId: "agloc-edl",
+    storageBucket: "agloc-edl.firebasestorage.app",
+    messagingSenderId: "905072085291",
+    appId: "1:905072085291:web:75c62ddd142fdb14135d6e"
   };
-  /* ⚠️ Synchronisation temporairement désactivée (compte Google Firebase suspendu
-     le 14/09/2026) — configuration précédente conservée ci-dessous pour rebranchement
-     rapide une fois la situation résolue :
-     apiKey: "AIzaSyCpmetPQ8-S59r8nkbFRUCWLeSKMn0KCeM", authDomain: "agloc-edl.firebaseapp.com",
-     projectId: "agloc-edl", storageBucket: "agloc-edl.firebasestorage.app",
-     messagingSenderId: "905072085291", appId: "1:905072085291:web:75c62ddd142fdb14135d6e" */
 
   /* ---- Stockage local (IndexedDB), utilisé si Firebase n'est pas configuré ---- */
   function buildIndexedDBStorage() {
@@ -601,6 +595,14 @@ function refreshDossierDisplay() {
 }
 
 /* ---------- Stockage ---------- */
+function requiredSignatureKeys(type) {
+  return type === 'entree' ? ['entrant', 'proprietaire'] : ['sortant', 'entrant', 'proprietaire'];
+}
+function isInspectionComplete(insp) {
+  const sigs = insp.signatures || {};
+  return requiredSignatureKeys(insp.type).every(k => !!sigs[k]);
+}
+
 const Store = {
   async getTechniciens() {
     try {
@@ -642,7 +644,9 @@ const Store = {
     const i = idx.findIndex(x => x.id === insp.id);
     const entry = {
       id: insp.id, type: insp.type, dossier: insp.dossier,
-      adresse: insp.bienAdresse, updatedAt: insp.updatedAt
+      adresse: insp.bienAdresse, updatedAt: insp.updatedAt,
+      agence: (insp.mandataire && insp.mandataire.agence) || '',
+      complete: isInspectionComplete(insp)
     };
     if (i >= 0) idx[i] = entry; else idx.unshift(entry);
     await this.setIndex(idx);
@@ -773,7 +777,8 @@ async function renderHome() {
   header.appendChild(brandLogo(40));
   header.appendChild(el('div', { class: 'brand', html: '<span class="brand-a">AG</span>LOC' }));
   header.appendChild(el('div', { class: 'brand-sub', text: 'États des lieux' }));
-  header.appendChild(el('button', { class: 'btn-back nav-right', text: '🗂️ Mandataires & agences', on: { click: renderMandataires } }));
+  header.appendChild(el('button', { class: 'btn-back nav-right', text: '✅ États des lieux réalisés', on: { click: renderCompleted } }));
+  header.appendChild(el('button', { class: 'btn-back', text: '🗂️ Mandataires & agences', on: { click: renderMandataires } }));
   App.appendChild(header);
 
   const wrap = el('div', { class: 'page' });
@@ -791,14 +796,83 @@ async function renderHome() {
 
   wrap.appendChild(el('h2', { class: 'section-title', text: 'États des lieux en cours' }));
 
-  if (!list.length) {
-    wrap.appendChild(el('p', { class: 'empty', text: 'Aucun état des lieux pour le moment. Créez-en un ci-dessus pour commencer votre visite.' }));
+  const inProgress = list.filter(e => !e.complete);
+
+  if (!inProgress.length) {
+    wrap.appendChild(el('p', { class: 'empty', text: 'Aucun état des lieux en cours. Créez-en un ci-dessus pour commencer votre visite.' }));
   } else {
     const grid = el('div', { class: 'card-grid' });
-    list.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
-    list.forEach(entry => grid.appendChild(buildInspectionCard(entry)));
+    inProgress.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+    inProgress.forEach(entry => grid.appendChild(buildInspectionCard(entry)));
     wrap.appendChild(grid);
   }
+
+  App.appendChild(wrap);
+}
+
+async function renderCompleted() {
+  const list = (await Store.getIndex()).filter(e => e.complete);
+  App.innerHTML = '';
+
+  const header = el('div', { class: 'topbar' });
+  header.appendChild(el('button', { class: 'btn-back', text: '← Accueil', on: { click: renderHome } }));
+  header.appendChild(brandLogo(28));
+  header.appendChild(el('div', { class: 'brand brand-compact', html: '<span class="brand-a">AG</span>LOC' }));
+  header.appendChild(el('div', { class: 'insp-header-title', text: 'États des lieux réalisés' }));
+  App.appendChild(header);
+
+  const wrap = el('div', { class: 'page' });
+
+  const agences = Array.from(new Set(list.map(e => e.agence || 'Sans agence'))).sort((a, b) => a.localeCompare(b));
+  const filterRow = el('div', { class: 'field', attrs: { style: 'max-width:320px;margin-bottom:16px;' } });
+  filterRow.appendChild(el('label', { text: 'Filtrer par agence' }));
+  const select = el('select');
+  const allOpt = el('option', { text: 'Toutes les agences (' + list.length + ')' }); allOpt.value = '';
+  select.appendChild(allOpt);
+  agences.forEach(a => {
+    const count = list.filter(e => (e.agence || 'Sans agence') === a).length;
+    const o = el('option', { text: a + ' (' + count + ')' }); o.value = a;
+    select.appendChild(o);
+  });
+  filterRow.appendChild(select);
+  wrap.appendChild(filterRow);
+
+  const listWrap = el('div');
+  wrap.appendChild(listWrap);
+
+  function renderList() {
+    listWrap.innerHTML = '';
+    const filterVal = select.value;
+    const filtered = filterVal ? list.filter(e => (e.agence || 'Sans agence') === filterVal) : list;
+    if (!filtered.length) {
+      listWrap.appendChild(el('p', { class: 'empty', text: 'Aucun état des lieux réalisé pour le moment.' }));
+      return;
+    }
+
+    if (filterVal) {
+      const grid = el('div', { class: 'card-grid' });
+      [...filtered].sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''))
+        .forEach(entry => grid.appendChild(buildInspectionCard(entry)));
+      listWrap.appendChild(grid);
+      return;
+    }
+
+    // Pas de filtre : regrouper par agence
+    const groups = {};
+    filtered.forEach(entry => {
+      const ag = entry.agence || 'Sans agence';
+      (groups[ag] = groups[ag] || []).push(entry);
+    });
+    Object.keys(groups).sort((a, b) => a.localeCompare(b)).forEach(ag => {
+      listWrap.appendChild(el('h3', { class: 'section-title', text: ag, attrs: { style: 'margin-top:18px;font-size:15px;' } }));
+      const grid = el('div', { class: 'card-grid' });
+      groups[ag].sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''))
+        .forEach(entry => grid.appendChild(buildInspectionCard(entry)));
+      listWrap.appendChild(grid);
+    });
+  }
+  select.addEventListener('change', renderList);
+  renderList();
 
   App.appendChild(wrap);
 }
