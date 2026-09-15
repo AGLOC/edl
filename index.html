@@ -424,13 +424,19 @@ function compressImage(file) {
      → General → Your apps → objet firebaseConfig). Tant que apiKey est vide, l'appli
      fonctionne en stockage local (IndexedDB), sans synchronisation entre appareils. */
   const FIREBASE_CONFIG = {
-    apiKey: "AIzaSyCpmetPQ8-S59r8nkbFRUCWLeSKMn0KCeM",
-    authDomain: "agloc-edl.firebaseapp.com",
-    projectId: "agloc-edl",
-    storageBucket: "agloc-edl.firebasestorage.app",
-    messagingSenderId: "905072085291",
-    appId: "1:905072085291:web:75c62ddd142fdb14135d6e"
+    apiKey: "",
+    authDomain: "",
+    projectId: "",
+    storageBucket: "",
+    messagingSenderId: "",
+    appId: ""
   };
+  /* ⚠️ Synchronisation temporairement désactivée (compte Google Firebase suspendu
+     le 14/09/2026) — configuration précédente conservée ci-dessous pour rebranchement
+     rapide une fois la situation résolue :
+     apiKey: "AIzaSyCpmetPQ8-S59r8nkbFRUCWLeSKMn0KCeM", authDomain: "agloc-edl.firebaseapp.com",
+     projectId: "agloc-edl", storageBucket: "agloc-edl.firebasestorage.app",
+     messagingSenderId: "905072085291", appId: "1:905072085291:web:75c62ddd142fdb14135d6e" */
 
   /* ---- Stockage local (IndexedDB), utilisé si Firebase n'est pas configuré ---- */
   function buildIndexedDBStorage() {
@@ -1853,6 +1859,59 @@ async function generatePDF(insp) {
     state.y += 12;
   }
 
+  function tableWithPhotos(headers, rows, colWidths, photoIdsPerRow) {
+    ensureSpace(18);
+    let x = margin;
+    doc.setFillColor(NAVY[0], NAVY[1], NAVY[2]);
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    const headerH = 16;
+    headers.forEach((h, i) => { doc.rect(x, state.y, colWidths[i], headerH, 'F'); doc.text(h, x + 4, state.y + 11); x += colWidths[i]; });
+    state.y += headerH;
+
+    const thumbW = 34, thumbH = 26, gap = 4;
+    const photoColIndex = colWidths.length - 1;
+    const photoColX = margin + colWidths.slice(0, photoColIndex).reduce((a, b) => a + b, 0);
+    const photoColW = colWidths[photoColIndex];
+    const perLine = Math.max(1, Math.floor((photoColW - 6) / (thumbW + gap)));
+
+    rows.forEach((r, ri) => {
+      const photos = (photoIdsPerRow[ri] || []).map(pid => photoCache[pid]).filter(Boolean);
+      const lines = photos.length ? Math.ceil(photos.length / perLine) : 0;
+      const rowH = Math.max(18, lines * (thumbH + gap) + 6);
+      ensureSpace(rowH);
+      x = margin;
+      const fill = ri % 2 === 0 ? LIGHTBLUE : [255, 255, 255];
+      r.forEach((cell, i) => {
+        doc.setFillColor(fill[0], fill[1], fill[2]);
+        doc.setDrawColor(GOLD[0], GOLD[1], GOLD[2]);
+        doc.rect(x, state.y, colWidths[i], rowH, 'FD');
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(NAVY[0], NAVY[1], NAVY[2]);
+        doc.text(String(cell === undefined || cell === null || cell === '' ? '—' : cell), x + 4, state.y + 11, { maxWidth: colWidths[i] - 8 });
+        x += colWidths[i];
+      });
+      doc.setFillColor(fill[0], fill[1], fill[2]);
+      doc.setDrawColor(GOLD[0], GOLD[1], GOLD[2]);
+      doc.rect(x, state.y, photoColW, rowH, 'FD');
+      if (photos.length) {
+        let px = photoColX + 3, py = state.y + 3;
+        photos.forEach((durl, pi) => {
+          if (pi > 0 && pi % perLine === 0) { px = photoColX + 3; py += thumbH + gap; }
+          try { doc.addImage(durl, 'JPEG', px, py, thumbW, thumbH); } catch (e) { /* image invalide */ }
+          px += thumbW + gap;
+        });
+      } else {
+        doc.setFont('helvetica', 'italic'); doc.setFontSize(7.5); doc.setTextColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
+        doc.text('—', photoColX + 4, state.y + 11);
+      }
+      state.y += rowH;
+    });
+    state.y += 12;
+  }
+
   function photoRow(photoIdsForRow) {
     const photos = (photoIdsForRow || []).map(pid => photoCache[pid]).filter(Boolean);
     if (!photos.length) return;
@@ -2024,10 +2083,15 @@ async function generatePDF(insp) {
   insp.cles.forEach(c => { if ((c.photos || []).length) photoRow(c.photos); });
 
   sectionTitle('Relevé des compteurs');
-  table(['Type', 'Relevé', 'Date', 'Coupé', 'Observations'],
-    insp.compteurs.map(m => [m.type, m.releve, m.date, m.coupe, m.obs]),
-    [150, 70, 65, 45, pageW - 2 * margin - 330]);
-  insp.compteurs.forEach(m => { if ((m.photos || []).length) photoRow(m.photos); });
+  tableWithPhotos(
+    ['Type', 'Relevé', 'Date', 'Observations', 'Photos'],
+    insp.compteurs.map(m => [
+      m.type, m.releve, m.date,
+      m.obs + (m.coupe === 'OUI' ? (m.obs ? ' — ' : '') + 'Coupé' : '')
+    ]),
+    [130, 55, 55, 165, 110],
+    insp.compteurs.map(m => m.photos || [])
+  );
 
   sectionTitle('Fournisseurs');
   rowPairs([
