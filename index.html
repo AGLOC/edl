@@ -1946,18 +1946,27 @@ async function generatePDF(insp) {
   }
 
   function table(headers, rows, colWidths) {
-    ensureSpace(18);
-    let x = margin;
-    doc.setFillColor(NAVY[0], NAVY[1], NAVY[2]);
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
     const rowH = 16;
-    headers.forEach((h, i) => { doc.rect(x, state.y, colWidths[i], rowH, 'F'); doc.text(h, x + 4, state.y + 11); x += colWidths[i]; });
-    state.y += rowH;
+    function drawTableHeader() {
+      ensureSpace(18);
+      let hx = margin;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      headers.forEach((h, i) => {
+        doc.setFillColor(NAVY[0], NAVY[1], NAVY[2]);
+        doc.rect(hx, state.y, colWidths[i], rowH, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.text(h, hx + 4, state.y + 11);
+        hx += colWidths[i];
+      });
+      state.y += rowH;
+    }
+    drawTableHeader();
     rows.forEach((r, ri) => {
+      const pageBefore = state.page;
       ensureSpace(rowH);
-      x = margin;
+      if (state.page !== pageBefore) drawTableHeader();
+      let x = margin;
       const fill = ri % 2 === 0 ? LIGHTBLUE : [255, 255, 255];
       r.forEach((cell, i) => {
         doc.setFillColor(fill[0], fill[1], fill[2]);
@@ -1975,15 +1984,22 @@ async function generatePDF(insp) {
   }
 
   function tableWithPhotos(headers, rows, colWidths, photoIdsPerRow) {
-    ensureSpace(18);
-    let x = margin;
-    doc.setFillColor(NAVY[0], NAVY[1], NAVY[2]);
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
     const headerH = 16;
-    headers.forEach((h, i) => { doc.rect(x, state.y, colWidths[i], headerH, 'F'); doc.text(h, x + 4, state.y + 11); x += colWidths[i]; });
-    state.y += headerH;
+    function drawTableHeader() {
+      ensureSpace(18);
+      let hx = margin;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      headers.forEach((h, i) => {
+        doc.setFillColor(NAVY[0], NAVY[1], NAVY[2]);
+        doc.rect(hx, state.y, colWidths[i], headerH, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.text(h, hx + 4, state.y + 11);
+        hx += colWidths[i];
+      });
+      state.y += headerH;
+    }
+    drawTableHeader();
 
     const thumbW = 95, thumbH = 71, gap = 4;
     const photoColIndex = colWidths.length - 1;
@@ -1991,6 +2007,7 @@ async function generatePDF(insp) {
     const photoColW = colWidths[photoColIndex];
     const perLine = Math.max(1, Math.floor((photoColW - 6) / (thumbW + gap)));
 
+    let x = margin;
     rows.forEach((r, ri) => {
       const photos = (photoIdsPerRow[ri] || []).map(pid => photoCache[pid]).filter(Boolean);
       const photoLines = photos.length ? Math.ceil(photos.length / perLine) : 0;
@@ -2005,7 +2022,9 @@ async function generatePDF(insp) {
       });
       const textH = textLines * 10 + 8;
       const rowH = Math.max(18, textH, photosH);
+      const pageBefore = state.page;
       ensureSpace(rowH);
+      if (state.page !== pageBefore) drawTableHeader();
       x = margin;
       const fill = ri % 2 === 0 ? LIGHTBLUE : [255, 255, 255];
       r.forEach((cell, i) => {
@@ -2073,7 +2092,9 @@ async function generatePDF(insp) {
     doc.setFont('helvetica', 'bold');
 
     function headerCell(text, w, fontSize, align) {
+      doc.setFillColor(NAVY[0], NAVY[1], NAVY[2]);
       doc.rect(x, state.y, w, rowH, 'F');
+      doc.setTextColor(255, 255, 255);
       doc.setFontSize(fontSize);
       const lines = doc.splitTextToSize(text, w - 6);
       const lineH = fontSize + 1.5;
