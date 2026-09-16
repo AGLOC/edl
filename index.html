@@ -63,6 +63,7 @@ button, input, select, textarea { font-family: inherit; }
 }
 .brand-logo { display: block; border-radius: 6px; flex-shrink: 0; }
 .dossier-preview { font-size: 12px; color: var(--subtle); margin-top: 4px; }
+.field-hint { font-size: 11px; color: var(--subtle); margin-top: 4px; line-height: 1.4; }
 .brand { font-size: 20px; font-weight: 700; letter-spacing: 0.5px; }
 .brand-compact { font-size: 16px; }
 .brand-a { color: var(--gold); }
@@ -1320,6 +1321,43 @@ function buildMandataireCard(m) {
   return card;
 }
 
+function generateDefaultRooms(n) {
+  const rooms = [];
+  if (!n || n < 1) return rooms;
+  if (n === 1) {
+    rooms.push(newRoom('Séjour / Cuisine', ROOM_PRESETS['Séjour / Cuisine']));
+  } else {
+    rooms.push(newRoom('Séjour / Cuisine', ROOM_PRESETS['Séjour / Cuisine']));
+    for (let i = 1; i <= n - 1; i++) {
+      rooms.push(newRoom('Chambre ' + i, ROOM_PRESETS['Chambre']));
+    }
+  }
+  rooms.push(newRoom('Dégagement / Couloir', ROOM_PRESETS['Dégagement / Couloir']));
+  rooms.push(newRoom('Salle d\'eau / Salle de bain', ROOM_PRESETS['Salle d\'eau / Salle de bain']));
+  rooms.push(newRoom('WC', ROOM_PRESETS['WC']));
+  return rooms;
+}
+
+function buildBienPiecesField() {
+  const wrap = el('div', { class: 'field' });
+  wrap.appendChild(el('label', { text: 'Nombre de pièces' }));
+  const input = el('input', { attrs: { type: 'text', inputmode: 'numeric' } });
+  input.value = CURRENT.bienPieces || '';
+  input.addEventListener('input', () => { CURRENT.bienPieces = input.value; markDirty(); });
+  input.addEventListener('blur', () => {
+    const n = parseInt(input.value, 10);
+    if (!n || n < 1 || CURRENT.pieces.length > 0) return;
+    CURRENT.pieces = generateDefaultRooms(n);
+    markDirty();
+  });
+  wrap.appendChild(input);
+  wrap.appendChild(el('div', {
+    class: 'field-hint',
+    text: 'En quittant ce champ, les pièces correspondantes seront créées automatiquement dans l\'onglet « Pièces » (si celui-ci est encore vide).'
+  }));
+  return wrap;
+}
+
 function buildGeneralTab(content) {
   const grid = el('div', { class: 'form-grid' });
   grid.appendChild(buildDossierField());
@@ -1332,7 +1370,7 @@ function buildGeneralTab(content) {
 
   const gridBien = el('div', { class: 'form-grid' });
   gridBien.appendChild(buildBienTypeSelector());
-  gridBien.appendChild(field('Nombre de pièces', CURRENT.bienPieces, v => CURRENT.bienPieces = v));
+  gridBien.appendChild(buildBienPiecesField());
   gridBien.appendChild(field('Adresse du bien', CURRENT.bienAdresse, v => CURRENT.bienAdresse = v, { wide: true }));
   content.appendChild(sectionBox('Informations sur le bien', gridBien));
 
@@ -1535,6 +1573,26 @@ function buildPhotoWidget(photoIds, onChange) {
 
 /* ---- Pièces ---- */
 function buildPiecesTab(content) {
+  const autoBox = el('div', { class: 'box add-room-box' });
+  autoBox.appendChild(el('h3', { class: 'box-title', text: 'Génération automatique' }));
+  const autoRow = el('div', { class: 'add-room-row' });
+  autoRow.appendChild(el('button', {
+    class: 'btn btn-outline btn-sm',
+    text: '🪄 Générer les pièces à partir du nombre de pièces (' + (CURRENT.bienPieces || '—') + ')',
+    on: {
+      click: () => {
+        const n = parseInt(CURRENT.bienPieces, 10);
+        if (!n || n < 1) { alert('Indiquez d\'abord un nombre de pièces valide dans l\'onglet Général.'); return; }
+        if (CURRENT.pieces.length > 0 && !confirm('Cela remplacera la liste actuelle des pièces (' + CURRENT.pieces.length + ' pièce(s)). Continuer ?')) return;
+        CURRENT.pieces = generateDefaultRooms(n);
+        markDirty();
+        rerenderPieces();
+      }
+    }
+  }));
+  autoBox.appendChild(autoRow);
+  content.appendChild(autoBox);
+
   const addBox = el('div', { class: 'box add-room-box' });
   addBox.appendChild(el('h3', { class: 'box-title', text: 'Ajouter une pièce' }));
   const row = el('div', { class: 'add-room-row' });
@@ -1877,7 +1935,7 @@ async function generatePDF(insp) {
     state.y = y + boxH + 20;
   }
 
-  function drawPage1Footer() {
+  function drawFooter() {
     doc.setDrawColor(GOLD[0], GOLD[1], GOLD[2]);
     doc.setLineWidth(0.75);
     doc.line(margin, pageH - 46, pageW - margin, pageH - 46);
@@ -1889,17 +1947,8 @@ async function generatePDF(insp) {
     doc.setFontSize(7.5);
     doc.setTextColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
     doc.text('Siège social : 13 Rue de Prévôté, 85670 Palluau · Tél : 02 52 63 01 44 · SIRET : 107 230 351 00010', pageW / 2, pageH - 20, { align: 'center' });
-  }
-
-  function drawFooter() {
-    doc.setDrawColor(GOLD[0], GOLD[1], GOLD[2]);
-    doc.setLineWidth(0.75);
-    doc.line(margin, pageH - 34, pageW - margin, pageH - 34);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.setTextColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
-    doc.text('AGLOC — Accompagnement locatif', margin, pageH - 22);
-    doc.text('Page ' + state.page, pageW - margin, pageH - 22, { align: 'right' });
+    doc.setFontSize(7);
+    doc.text('Page ' + state.page, pageW - margin, pageH - 20, { align: 'right' });
   }
 
   function newPage() {
@@ -2294,7 +2343,7 @@ async function generatePDF(insp) {
 
   /* ---------------- construction du document : page 1 (page de garde) ---------------- */
   const bandeauY = drawPage1Header();
-  drawPage1Footer();
+  drawFooter();
   drawHeaderCompact(bandeauY);
 
   /* Photo de la clé, centrée */
