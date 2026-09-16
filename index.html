@@ -207,6 +207,9 @@ button, input, select, textarea { font-family: inherit; }
   display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--gold-dark);
   cursor: pointer; text-align: center; font-weight: 600;
 }
+.photo-strip-center { justify-content: center; }
+.photo-thumb-large { width: 160px; height: 160px; }
+.photo-widget-single .photo-add { width: 160px; height: 160px; font-size: 13px; }
 
 /* ---------- Pièces ---------- */
 .add-room-box { background: var(--lightblue); border: none; }
@@ -698,7 +701,8 @@ const Store = {
 
 function collectPhotoIds(insp) {
   const ids = [];
-  (insp.cles || []).forEach(c => (c.photos || []).forEach(p => ids.push(p)));
+  if (insp.bienPhoto) ids.push(insp.bienPhoto);
+  if (insp.clesPhoto) ids.push(insp.clesPhoto);
   (insp.compteurs || []).forEach(m => (m.photos || []).forEach(p => ids.push(p)));
   (insp.pieces || []).forEach(room => (room.lignes || []).forEach(l => (l.photos || []).forEach(p => ids.push(p))));
   return ids;
@@ -719,11 +723,13 @@ function newInspection(type) {
     bienType: 'Maison',
     bienPieces: '',
     bienAdresse: '',
+    bienPhoto: null,
     entrantNom: '',
     entrantDate: '',
     sortantDate: '',
     fournisseurTel: '', fournisseurGaz: '', fournisseurElec: '',
-    cles: [{ nombre: '2', numero: '', obs: 'Porte d\'entrée', photos: [] }],
+    cles: [{ nombre: '2', numero: '', obs: 'Porte d\'entrée' }],
+    clesPhoto: null,
     chauffage: [], ecs: [],
     entretienGaz: '',
     compteurs: METER_TYPES.map(t => ({ type: t, releve: '', date: fmtDate(now), obs: '', coupe: 'NON', photos: [] })),
@@ -743,7 +749,7 @@ function newRoom(name, criteres) {
 }
 
 function newLigne(critere) {
-  return { id: uid(), critere: critere || '', substrat: '', substratModifie: false, etat: '', commentaire: '', nettoyage: false, photos: [] };
+  return { id: uid(), critere: critere || '', substrat: '', substratModifie: false, etat: '', commentaire: '', nettoyage: false, verifiable: true, photos: [] };
 }
 
 /* Sanity check point for node --check: end of file */
@@ -935,7 +941,7 @@ async function duplicateInspection(id) {
   copy.fournisseurGaz = src.fournisseurGaz;
   copy.fournisseurElec = src.fournisseurElec;
   copy.dossier = computeDossierLabel(copy);
-  copy.cles = (src.cles || []).map(c => ({ nombre: c.nombre, numero: c.numero, obs: c.obs, photos: [] }));
+  copy.cles = (src.cles || []).map(c => ({ nombre: c.nombre, numero: c.numero, obs: c.obs }));
   copy.chauffage = [...(src.chauffage || [])];
   copy.ecs = [...(src.ecs || [])];
   copy.pieces = (src.pieces || []).map(room => ({
@@ -1372,7 +1378,10 @@ function buildGeneralTab(content) {
   gridBien.appendChild(buildBienTypeSelector());
   gridBien.appendChild(buildBienPiecesField());
   gridBien.appendChild(field('Adresse du bien', CURRENT.bienAdresse, v => CURRENT.bienAdresse = v, { wide: true }));
-  content.appendChild(sectionBox('Informations sur le bien', gridBien));
+  const bienBox = sectionBox('Informations sur le bien', gridBien);
+  bienBox.appendChild(el('div', { class: 'field-hint', text: 'Photo du bien (affichée en grand sur la page de garde du PDF).' }));
+  bienBox.appendChild(buildSinglePhotoWidget(() => CURRENT.bienPhoto, v => CURRENT.bienPhoto = v, () => markDirty()));
+  content.appendChild(bienBox);
 
   const grid2 = el('div', { class: 'form-grid' });
   if (CURRENT.type === 'entree') {
@@ -1411,7 +1420,6 @@ function buildClesTab(content) {
         class: 'btn-icon', text: '✕',
         on: {
           click: async () => {
-            for (const pid of (c.photos || [])) await Store.deletePhoto(pid);
             CURRENT.cles.splice(i, 1); markDirty(); renderCles();
           }
         }
@@ -1419,16 +1427,16 @@ function buildClesTab(content) {
       const inputsRow = el('div', { class: 'cle-row-inputs' });
       inputsRow.appendChild(nb); inputsRow.appendChild(num); inputsRow.appendChild(obs); inputsRow.appendChild(del);
       row.appendChild(inputsRow);
-      if (!c.photos) c.photos = [];
-      row.appendChild(buildPhotoWidget(c.photos, () => markDirty()));
       clesList.appendChild(row);
     });
   };
   renderCles();
   clesBox.appendChild(el('button', {
     class: 'btn btn-outline btn-sm', text: '+ Ajouter une clé',
-    on: { click: () => { CURRENT.cles.push({ nombre: '', numero: '', obs: '', photos: [] }); markDirty(); renderCles(); } }
+    on: { click: () => { CURRENT.cles.push({ nombre: '', numero: '', obs: '' }); markDirty(); renderCles(); } }
   }));
+  clesBox.appendChild(el('div', { class: 'field-hint', text: 'Une seule photo, regroupant l\'ensemble des clés remises.' }));
+  clesBox.appendChild(buildSinglePhotoWidget(() => CURRENT.clesPhoto, v => CURRENT.clesPhoto = v, () => markDirty()));
   content.appendChild(clesBox);
 
   const meterBox = el('div', { class: 'box' });
@@ -1521,6 +1529,58 @@ function buildCheckOption(label, arr) {
 }
 
 /* ---- Photo widget (réutilisable) ---- */
+function buildSinglePhotoWidget(getId, setId, onChange) {
+  const wrap = el('div', { class: 'photo-widget photo-widget-single' });
+  const strip = el('div', { class: 'photo-strip photo-strip-center' });
+  wrap.appendChild(strip);
+
+  const render = () => {
+    strip.innerHTML = '';
+    const pid = getId();
+    if (pid) {
+      const thumb = el('div', { class: 'photo-thumb photo-thumb-large' });
+      const img = el('img');
+      Store.getPhoto(pid).then(url => { if (url) img.src = url; });
+      thumb.appendChild(img);
+      thumb.appendChild(el('button', {
+        class: 'photo-del', text: '✕',
+        on: {
+          click: async () => {
+            await Store.deletePhoto(pid);
+            setId(null);
+            onChange();
+            render();
+          }
+        }
+      }));
+      strip.appendChild(thumb);
+    } else {
+      const addBtn = el('label', { class: 'photo-add' });
+      addBtn.appendChild(el('span', { text: '+ Photo' }));
+      const input = el('input', { attrs: { type: 'file', accept: 'image/*' } });
+      input.style.display = 'none';
+      input.addEventListener('change', async () => {
+        const f = (input.files || [])[0];
+        if (f) {
+          try {
+            const dataUrl = await compressImage(f);
+            const newPid = uid();
+            await Store.setPhoto(newPid, dataUrl);
+            setId(newPid);
+          } catch (e) { /* ignore fichier illisible */ }
+        }
+        input.value = '';
+        onChange();
+        render();
+      });
+      addBtn.appendChild(input);
+      strip.appendChild(addBtn);
+    }
+  };
+  render();
+  return wrap;
+}
+
 function buildPhotoWidget(photoIds, onChange) {
   const wrap = el('div', { class: 'photo-widget' });
   const strip = el('div', { class: 'photo-strip' });
@@ -1737,6 +1797,15 @@ function buildLigneRow(room, ligne) {
   cleanLabel.appendChild(cleanCb);
   cleanLabel.appendChild(el('span', { text: 'Nettoyage incomplet' }));
   bottom.appendChild(cleanLabel);
+
+  const verifLabel = el('label', { class: 'check-option' });
+  const verifCb = el('input', { attrs: { type: 'checkbox' } });
+  verifCb.checked = ligne.verifiable !== false;
+  verifCb.addEventListener('change', () => { ligne.verifiable = verifCb.checked; markDirty(); });
+  verifLabel.appendChild(verifCb);
+  verifLabel.appendChild(el('span', { text: 'Vérifiable (décochez si non vérifiable, ex : électricité coupée)' }));
+  bottom.appendChild(verifLabel);
+
   row.appendChild(bottom);
 
   row.appendChild(buildPhotoWidget(ligne.photos, () => markDirty()));
@@ -2182,30 +2251,16 @@ async function generatePDF(insp) {
     state.y += 12;
   }
 
-  function photoRow(photoIdsForRow) {
-    const photos = (photoIdsForRow || []).map(pid => photoCache[pid]).filter(Boolean);
-    if (!photos.length) return;
-    const thumbW = 170, thumbH = 126, gap = 6;
-    let x = margin;
-    ensureSpace(thumbH + 6);
-    photos.forEach(durl => {
-      if (x + thumbW > pageW - margin) { x = margin; state.y += thumbH + gap; ensureSpace(thumbH + 6); }
-      try { doc.addImage(durl, 'JPEG', x, state.y, thumbW, thumbH); } catch (e) { /* ignore image invalide */ }
-      x += thumbW + gap;
-    });
-    state.y += thumbH + 10;
-  }
-
-  /* ---- Table "Détails de l'état des lieux" (grille identique au modèle) ---- */
   const ETAT_COLS = ['NEUF', 'BE', 'EM', 'ME', 'DEG'];
   const ETAT_LABELS = { NEUF: 'Neuf', BE: 'B.E.', EM: 'E.M.', ME: 'M.E.', DEG: 'DEG' };
   const COL = {
     critere: 70,
     etat: 18,
     nettoyage: 40,
+    verifiable: 38,
     photos: 145,
   };
-  COL.commentaire = (pageW - 2 * margin) - COL.critere - COL.etat * ETAT_COLS.length - COL.nettoyage - COL.photos;
+  COL.commentaire = (pageW - 2 * margin) - COL.critere - COL.etat * ETAT_COLS.length - COL.nettoyage - COL.verifiable - COL.photos;
 
   function etatTableHeader() {
     ensureSpace(30);
@@ -2231,6 +2286,7 @@ async function generatePDF(insp) {
     headerCell('Critères', COL.critere, 7.5, 'left');
     ETAT_COLS.forEach(code => headerCell(ETAT_LABELS[code], COL.etat, 6.5, 'center'));
     headerCell('Nettoyage incomplet', COL.nettoyage, 6.5, 'center');
+    headerCell('Vérifiable', COL.verifiable, 6.5, 'center');
     headerCell('Commentaires', COL.commentaire, 7.5, 'left');
     headerCell('Photos', COL.photos, 7.5, 'center');
     state.y += rowH;
@@ -2314,6 +2370,17 @@ async function generatePDF(insp) {
     }
     x += COL.nettoyage;
 
+    /* Vérifiable (marqué uniquement quand NON vérifiable, ex : électricité coupée) */
+    doc.rect(x, y0, COL.verifiable, rowH, 'S');
+    if (ligne.verifiable === false) {
+      doc.setTextColor(203, 58, 46);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(6.5);
+      const nvLines = doc.splitTextToSize('Non vérifiable', COL.verifiable - 4);
+      doc.text(nvLines, x + COL.verifiable / 2, y0 + rowH / 2 - (nvLines.length - 1) * 4 + 3, { align: 'center' });
+    }
+    x += COL.verifiable;
+
     /* Commentaires */
     doc.rect(x, y0, COL.commentaire, rowH, 'S');
     if (commentLines.length) {
@@ -2369,6 +2436,7 @@ async function generatePDF(insp) {
     ['Type de bien', insp.bienType + (insp.bienPieces ? ' — ' + insp.bienPieces + ' pièce(s)' : '')],
     ['Adresse', insp.bienAdresse],
   ]);
+  if (insp.bienPhoto) centeredPhoto(insp.bienPhoto, 260, 195);
 
   sectionTitle('Locataires');
   twoColBlock(
@@ -2387,11 +2455,20 @@ async function generatePDF(insp) {
   /* ---------------- pages suivantes : détail de l'état des lieux ---------------- */
   newPage();
 
+  function centeredPhoto(photoId, w, h) {
+    const durl = photoCache[photoId];
+    if (!durl) return;
+    ensureSpace(h + 10);
+    const x = (pageW - w) / 2;
+    try { doc.addImage(durl, 'JPEG', x, state.y, w, h); } catch (e) { /* ignore image invalide */ }
+    state.y += h + 12;
+  }
+
   sectionTitle('Clés remises');
   table(['Nombre', 'Numéro', 'Observations'],
     insp.cles.map(c => [c.nombre, c.numero, c.obs]),
     [70, 120, pageW - 2 * margin - 190]);
-  insp.cles.forEach(c => { if ((c.photos || []).length) photoRow(c.photos); });
+  centeredPhoto(insp.clesPhoto, 170, 126);
 
   sectionTitle('Relevé des compteurs');
   tableWithPhotos(
