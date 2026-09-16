@@ -613,7 +613,7 @@ function refreshDossierDisplay() {
 
 /* ---------- Stockage ---------- */
 function requiredSignatureKeys(type) {
-  return type === 'entree' ? ['entrant', 'proprietaire'] : ['sortant', 'entrant', 'proprietaire'];
+  return type === 'entree' ? ['entrant', 'proprietaire'] : ['sortant', 'proprietaire'];
 }
 function isInspectionComplete(insp) {
   if (insp.pdfGenerated) return true;
@@ -1728,7 +1728,7 @@ function buildRecapTab(content) {
   const sigGrid = el('div', { class: 'sig-grid' });
   const who = CURRENT.type === 'entree'
     ? [['entrant', 'Locataire entrant'], ['proprietaire', 'Propriétaire / mandataire']]
-    : [['sortant', 'Locataire sortant'], ['entrant', 'Locataire entrant (si présent)'], ['proprietaire', 'Propriétaire / mandataire']];
+    : [['sortant', 'Locataire sortant'], ['proprietaire', 'Propriétaire / mandataire']];
   who.forEach(([key, label]) => sigGrid.appendChild(buildSignaturePad(key, label)));
   sigBox.appendChild(sigGrid);
   content.appendChild(sigBox);
@@ -2421,7 +2421,7 @@ async function generatePDF(insp) {
 
   const sigKeys = insp.type === 'entree'
     ? [['entrant', 'Locataire entrant', insp.entrantNom], ['proprietaire', 'Propriétaire / mandataire', insp.proprietaire]]
-    : [['sortant', 'Locataire sortant', insp.entrantNom], ['entrant', 'Locataire entrant', insp.entrantNom], ['proprietaire', 'Propriétaire / mandataire', insp.proprietaire]];
+    : [['sortant', 'Locataire sortant', insp.entrantNom], ['proprietaire', 'Propriétaire / mandataire', insp.proprietaire]];
 
   const boxW = (pageW - 2 * margin - (sigKeys.length - 1) * 16) / sigKeys.length;
   const boxH = 130;
