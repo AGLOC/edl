@@ -2436,7 +2436,7 @@ async function generatePDF(insp) {
     ['Type de bien', insp.bienType + (insp.bienPieces ? ' — ' + insp.bienPieces + ' pièce(s)' : '')],
     ['Adresse', insp.bienAdresse],
   ]);
-  if (insp.bienPhoto) centeredPhoto(insp.bienPhoto, 260, 195);
+  if (insp.bienPhoto) centeredPhoto(insp.bienPhoto, 340, 260);
 
   sectionTitle('Locataires');
   twoColBlock(
@@ -2455,9 +2455,16 @@ async function generatePDF(insp) {
   /* ---------------- pages suivantes : détail de l'état des lieux ---------------- */
   newPage();
 
-  function centeredPhoto(photoId, w, h) {
+  function centeredPhoto(photoId, maxW, maxH) {
     const durl = photoCache[photoId];
     if (!durl) return;
+    let w = maxW, h = maxH;
+    try {
+      const props = doc.getImageProperties(durl);
+      const ratio = Math.min(maxW / props.width, maxH / props.height);
+      w = props.width * ratio;
+      h = props.height * ratio;
+    } catch (e) { /* dimensions indisponibles, on garde le cadre max */ }
     ensureSpace(h + 10);
     const x = (pageW - w) / 2;
     try { doc.addImage(durl, 'JPEG', x, state.y, w, h); } catch (e) { /* ignore image invalide */ }
