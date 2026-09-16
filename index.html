@@ -2218,7 +2218,7 @@ async function generatePDF(insp) {
     state.y += 20;
   }
 
-  function table(headers, rows, colWidths) {
+  function table(headers, rows, colWidths, colorFn) {
     const headerH = 16;
     function drawTableHeader() {
       ensureSpace(18);
@@ -2257,7 +2257,9 @@ async function generatePDF(insp) {
         doc.rect(x, state.y, colWidths[i], rowH, 'FD');
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8);
-        doc.setTextColor(NAVY[0], NAVY[1], NAVY[2]);
+        const custom = colorFn ? colorFn(r[i], ri, i) : null;
+        const color = custom || NAVY;
+        doc.setTextColor(color[0], color[1], color[2]);
         doc.text(wrapped, x + 4, state.y + 11);
         x += colWidths[i];
       });
@@ -2724,7 +2726,13 @@ async function generatePDF(insp) {
         sectionTitle('Comparatif avec l\'état des lieux d\'entrée');
         cgvP('Seuls les critères dont l\'état a changé entre l\'entrée et la sortie sont listés ci-dessous.', { size: 7.5, gap: 8 });
         table(['Pièce', 'Critère', 'À l\'entrée', 'À la sortie', 'Évolution'], comparisonRows,
-          [90, 100, 75, 75, pageW - 2 * margin - 340]);
+          [90, 100, 75, 75, pageW - 2 * margin - 340],
+          (cell, ri, ci) => {
+            if (ci !== 4) return null;
+            if (cell === 'Dégradation') return [176, 58, 46];
+            if (cell === 'Amélioration') return [26, 107, 60];
+            return null;
+          });
       }
     }
   }
