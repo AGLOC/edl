@@ -2219,7 +2219,7 @@ async function generatePDF(insp) {
   }
 
   function table(headers, rows, colWidths) {
-    const rowH = 16;
+    const headerH = 16;
     function drawTableHeader() {
       ensureSpace(18);
       let hx = margin;
@@ -2227,28 +2227,38 @@ async function generatePDF(insp) {
       doc.setFontSize(8);
       headers.forEach((h, i) => {
         doc.setFillColor(NAVY[0], NAVY[1], NAVY[2]);
-        doc.rect(hx, state.y, colWidths[i], rowH, 'F');
+        doc.rect(hx, state.y, colWidths[i], headerH, 'F');
         doc.setTextColor(255, 255, 255);
         doc.text(h, hx + 4, state.y + 11);
         hx += colWidths[i];
       });
-      state.y += rowH;
+      state.y += headerH;
     }
     drawTableHeader();
     rows.forEach((r, ri) => {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      let textLines = 1;
+      const wrappedCells = r.map((cell, i) => {
+        const txt = String(cell === undefined || cell === null || cell === '' ? '—' : cell);
+        const wrapped = doc.splitTextToSize(txt, colWidths[i] - 8);
+        textLines = Math.max(textLines, wrapped.length);
+        return wrapped;
+      });
+      const rowH = Math.max(16, textLines * 10 + 6);
       const pageBefore = state.page;
       ensureSpace(rowH);
       if (state.page !== pageBefore) drawTableHeader();
       let x = margin;
       const fill = ri % 2 === 0 ? LIGHTBLUE : [255, 255, 255];
-      r.forEach((cell, i) => {
+      wrappedCells.forEach((wrapped, i) => {
         doc.setFillColor(fill[0], fill[1], fill[2]);
         doc.setDrawColor(GOLD[0], GOLD[1], GOLD[2]);
         doc.rect(x, state.y, colWidths[i], rowH, 'FD');
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8);
         doc.setTextColor(NAVY[0], NAVY[1], NAVY[2]);
-        doc.text(String(cell === undefined || cell === null || cell === '' ? '—' : cell), x + 4, state.y + 11, { maxWidth: colWidths[i] - 8 });
+        doc.text(wrapped, x + 4, state.y + 11);
         x += colWidths[i];
       });
       state.y += rowH;
@@ -2706,12 +2716,11 @@ async function generatePDF(insp) {
             room.nom, l.critere || '(sans nom)',
             STATE_MAP[etatEntree] ? STATE_MAP[etatEntree].label : etatEntree,
             STATE_MAP[etatSortie] ? STATE_MAP[etatSortie].label : etatSortie,
-            rankSortie > rankEntree ? '↘ Dégradation' : '↗ Amélioration'
+            rankSortie > rankEntree ? 'Dégradation' : 'Amélioration'
           ]);
         });
       });
       if (comparisonRows.length) {
-        newPage();
         sectionTitle('Comparatif avec l\'état des lieux d\'entrée');
         cgvP('Seuls les critères dont l\'état a changé entre l\'entrée et la sortie sont listés ci-dessous.', { size: 7.5, gap: 8 });
         table(['Pièce', 'Critère', 'À l\'entrée', 'À la sortie', 'Évolution'], comparisonRows,
@@ -2732,7 +2741,6 @@ async function generatePDF(insp) {
       });
     });
     if (degradedItems.length) {
-      newPage();
       sectionTitle('Récapitulatif des éléments à entretenir, réparer ou remplacer');
       table(['Pièce', 'Élément', 'État', 'Observations'], degradedItems,
         [95, 110, 65, pageW - 2 * margin - 270]);
