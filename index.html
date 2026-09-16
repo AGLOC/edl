@@ -719,8 +719,8 @@ function newInspection(type) {
     bienPieces: '',
     bienAdresse: '',
     entrantNom: '',
-    entrantDate: type === 'entree' ? now : '',
-    sortantDate: type === 'sortie' ? now : '',
+    entrantDate: '',
+    sortantDate: '',
     fournisseurTel: '', fournisseurGaz: '', fournisseurElec: '',
     cles: [{ nombre: '2', numero: '', obs: 'Porte d\'entrée', photos: [] }],
     chauffage: [], ecs: [],
@@ -1791,6 +1791,12 @@ function buildSignaturePad(key, label) {
     if (!drawing) return;
     drawing = false;
     CURRENT.signatures[key] = canvas.toDataURL('image/png');
+    if (key === 'entrant' && CURRENT.type === 'entree' && !CURRENT.entrantDate) {
+      CURRENT.entrantDate = new Date().toISOString();
+    }
+    if (key === 'sortant' && CURRENT.type === 'sortie' && !CURRENT.sortantDate) {
+      CURRENT.sortantDate = new Date().toISOString();
+    }
     markDirty();
   }
   canvas.addEventListener('mousedown', start);
@@ -1806,6 +1812,8 @@ function buildSignaturePad(key, label) {
       click: () => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         CURRENT.signatures[key] = null;
+        if (key === 'entrant' && CURRENT.type === 'entree') CURRENT.entrantDate = '';
+        if (key === 'sortant' && CURRENT.type === 'sortie') CURRENT.sortantDate = '';
         hasDrawn = false;
         markDirty();
       }
