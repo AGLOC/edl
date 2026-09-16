@@ -729,6 +729,7 @@ function newInspection(type) {
     id: uid(),
     type: type, // 'entree' | 'sortie'
     dossierNumero: '',
+    sourceId: null,
     dossier: '',
     dateEdl: now.slice(0, 10),
     technicien: '',
@@ -776,12 +777,16 @@ let CURRENT = null;           // inspection en cours d'édition
 let SAVE_STATUS = null;       // ref DOM au badge de sauvegarde
 let MANDATAIRES_CACHE = [];   // cache des mandataires/agences enregistrés
 let TECHNICIENS_CACHE = [];   // cache des techniciens enregistrés
+let ENTREE_INSPECTIONS_CACHE = []; // cache des états des lieux d'entrée existants (pour lier une sortie)
 let DOSSIER_TITLE_SPAN = null; // ref DOM du n° de dossier affiché dans l'en-tête
 let DOSSIER_PREVIEW_EL = null; // ref DOM de l'aperçu du n° de dossier complet
 
 async function refreshMandataires() {
   MANDATAIRES_CACHE = await Store.getMandataires();
   TECHNICIENS_CACHE = await Store.getTechniciens();
+  const idx = await Store.getIndex();
+  ENTREE_INSPECTIONS_CACHE = idx.filter(e => e.type === 'entree')
+    .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
 }
 
 function simpleField(label, value, onInput, opts) {
@@ -942,6 +947,7 @@ async function duplicateInspection(id) {
   if (!src) return;
   const otherType = src.type === 'entree' ? 'sortie' : 'entree';
   const copy = newInspection(otherType);
+  copy.sourceId = otherType === 'sortie' ? src.id : null;
   copy.dossierNumero = await nextDossierNumber();
   copy.mandataire = src.mandataire ? { ...src.mandataire } : null;
   copy.technicien = src.technicien;
@@ -1405,6 +1411,40 @@ function buildGeneralTab(content) {
     grid2.appendChild(readOnlyField('Date et heure de sortie', fmtDateTime(CURRENT.sortantDate)));
   }
   content.appendChild(sectionBox('Locataires', grid2));
+
+  if (CURRENT.type === 'sortie') {
+    content.appendChild(buildSourceLinkBox());
+  }
+}
+
+function buildSourceLinkBox() {
+  const box = el('div', { class: 'box' });
+  box.appendChild(el('h3', { class: 'box-title', text: 'État des lieux d\'entrée correspondant' }));
+  box.appendChild(el('div', {
+    class: 'field-hint',
+    text: 'Permet de générer le comparatif entrée / sortie en fin de PDF. Si vous avez dupliqué depuis l\'entrée, ce lien est déjà fait automatiquement.'
+  }));
+  const select = el('select');
+  const noneOpt = el('option', { text: '— Aucun lien —' }); noneOpt.value = '';
+  select.appendChild(noneOpt);
+  ENTREE_INSPECTIONS_CACHE.forEach(e => {
+    const label = (e.dossier || 'Sans numéro') + (e.adresse ? ' — ' + e.adresse : '');
+    const o = el('option', { text: label }); o.value = e.id;
+    if (CURRENT.sourceId === e.id) o.selected = true;
+    select.appendChild(o);
+  });
+  if (CURRENT.sourceId && !ENTREE_INSPECTIONS_CACHE.some(e => e.id === CURRENT.sourceId)) {
+    const missingOpt = el('option', { text: '⚠ Dossier lié introuvable (peut-être supprimé)' });
+    missingOpt.value = CURRENT.sourceId;
+    missingOpt.selected = true;
+    select.appendChild(missingOpt);
+  }
+  select.addEventListener('change', () => {
+    CURRENT.sourceId = select.value || null;
+    markDirty();
+  });
+  box.appendChild(select);
+  return box;
 }
 
 function sectionBox(title, inner) {
@@ -2643,6 +2683,41 @@ async function generatePDF(insp) {
       state.y += lineH;
     });
     state.y += opts.gap !== undefined ? opts.gap : 6;
+  }
+
+  /* ---------------- Comparatif avec l'état des lieux d'entrée (si ce dossier en est issu) ---------------- */
+  if (insp.type === 'sortie' && insp.sourceId) {
+    const source = await Store.getInspection(insp.sourceId);
+    if (source) {
+      const STATE_RANK = Object.fromEntries(STATES.map((s, i) => [s.code, i])); // 0 = meilleur état, indice croissant = état qui se dégrade
+      const sourceMap = {};
+      (source.pieces || []).forEach(room => {
+        (room.lignes || []).forEach(l => { sourceMap[room.nom + ' / ' + l.critere] = l.etat; });
+      });
+      const comparisonRows = [];
+      (insp.pieces || []).forEach(room => {
+        (room.lignes || []).forEach(l => {
+          const etatEntree = sourceMap[room.nom + ' / ' + l.critere];
+          const etatSortie = l.etat;
+          if (!etatEntree || !etatSortie || etatEntree === etatSortie) return;
+          const rankEntree = STATE_RANK[etatEntree], rankSortie = STATE_RANK[etatSortie];
+          if (rankEntree === undefined || rankSortie === undefined) return;
+          comparisonRows.push([
+            room.nom, l.critere || '(sans nom)',
+            STATE_MAP[etatEntree] ? STATE_MAP[etatEntree].label : etatEntree,
+            STATE_MAP[etatSortie] ? STATE_MAP[etatSortie].label : etatSortie,
+            rankSortie > rankEntree ? '↘ Dégradation' : '↗ Amélioration'
+          ]);
+        });
+      });
+      if (comparisonRows.length) {
+        newPage();
+        sectionTitle('Comparatif avec l\'état des lieux d\'entrée');
+        cgvP('Seuls les critères dont l\'état a changé entre l\'entrée et la sortie sont listés ci-dessous.', { size: 7.5, gap: 8 });
+        table(['Pièce', 'Critère', 'À l\'entrée', 'À la sortie', 'Évolution'], comparisonRows,
+          [90, 100, 75, 75, pageW - 2 * margin - 340]);
+      }
+    }
   }
 
   /* ---------------- Récapitulatif des éléments dégradés (sortie uniquement) ---------------- */
