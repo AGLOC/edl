@@ -2465,7 +2465,7 @@ async function generatePDF(insp) {
     const degradedItems = [];
     (insp.pieces || []).forEach(room => {
       (room.lignes || []).forEach(l => {
-        if (l.etat === 'ME' || l.etat === 'DEG') {
+        if (l.etat === 'EM' || l.etat === 'ME' || l.etat === 'DEG') {
           const s = STATE_MAP[l.etat];
           degradedItems.push([room.nom, l.critere || '(sans nom)', s ? s.label : l.etat, l.commentaire || '']);
         }
@@ -2473,10 +2473,10 @@ async function generatePDF(insp) {
     });
     if (degradedItems.length) {
       newPage();
-      sectionTitle('Récapitulatif des éléments à réparer ou remplacer');
+      sectionTitle('Récapitulatif des éléments à entretenir, réparer ou remplacer');
       table(['Pièce', 'Élément', 'État', 'Observations'], degradedItems,
         [95, 110, 65, pageW - 2 * margin - 270]);
-      cgvP('Suite à ces constatations, nous vous transmettons un devis afin de pouvoir réaliser la remise en état de votre bien.', { bold: true, gap: 10 });
+      cgvP('Suite à ces constatations, nous vous transmettons un devis afin de pouvoir réaliser la remise en état de votre bien. Ce devis est communiqué à titre indicatif, sans obligation ni engagement de votre part.', { bold: true, gap: 10 });
     }
   }
 
