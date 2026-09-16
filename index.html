@@ -244,6 +244,14 @@ button, input, select, textarea { font-family: inherit; }
   font-size: 12.5px; font-style: italic; color: var(--subtle); padding: 3px 2px; margin-bottom: 8px;
 }
 .substrat-input:focus { outline: none; border-color: var(--gold); }
+.substrat-modif-btn {
+  display: block; width: 100%; text-align: left; margin-bottom: 8px; padding: 6px 10px;
+  border: 1.5px dashed var(--border); border-radius: 7px; background: transparent;
+  font-size: 12px; font-weight: 600; color: var(--subtle); cursor: pointer;
+}
+.substrat-modif-btn.active {
+  border: 1.5px solid var(--red); border-style: solid; background: #fdf0ee; color: var(--red);
+}
 .state-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
 .state-btn {
   --state-color: #999;
@@ -608,6 +616,7 @@ function requiredSignatureKeys(type) {
   return type === 'entree' ? ['entrant', 'proprietaire'] : ['sortant', 'entrant', 'proprietaire'];
 }
 function isInspectionComplete(insp) {
+  if (insp.pdfGenerated) return true;
   const sigs = insp.signatures || {};
   return requiredSignatureKeys(insp.type).every(k => !!sigs[k]);
 }
@@ -733,7 +742,7 @@ function newRoom(name, criteres) {
 }
 
 function newLigne(critere) {
-  return { id: uid(), critere: critere || '', substrat: '', etat: '', commentaire: '', nettoyage: false, photos: [] };
+  return { id: uid(), critere: critere || '', substrat: '', substratModifie: false, etat: '', commentaire: '', nettoyage: false, photos: [] };
 }
 
 /* Sanity check point for node --check: end of file */
@@ -930,7 +939,11 @@ async function duplicateInspection(id) {
   copy.ecs = [...(src.ecs || [])];
   copy.pieces = (src.pieces || []).map(room => ({
     id: uid(), nom: room.nom,
-    lignes: (room.lignes || []).map(l => newLigne(l.critere))
+    lignes: (room.lignes || []).map(l => {
+      const nl = newLigne(l.critere);
+      nl.substrat = l.substrat || '';
+      return nl;
+    })
   }));
   await Store.saveInspection(copy);
   openInspection(copy.id);
@@ -1625,6 +1638,20 @@ function buildLigneRow(room, ligne) {
   substratInput.addEventListener('input', () => { ligne.substrat = substratInput.value; markDirty(); });
   row.appendChild(substratInput);
 
+  if (CURRENT.type === 'sortie') {
+    const modifBtn = el('button', {
+      class: 'substrat-modif-btn' + (ligne.substratModifie ? ' active' : ''),
+      text: ligne.substratModifie ? '⚠ Modification constatée lors de la sortie des lieux' : '+ Signaler une modification du revêtement'
+    });
+    modifBtn.addEventListener('click', () => {
+      ligne.substratModifie = !ligne.substratModifie;
+      markDirty();
+      modifBtn.classList.toggle('active', ligne.substratModifie);
+      modifBtn.textContent = ligne.substratModifie ? '⚠ Modification constatée lors de la sortie des lieux' : '+ Signaler une modification du revêtement';
+    });
+    row.appendChild(modifBtn);
+  }
+
   const states = el('div', { class: 'state-row' });
   STATES.forEach(s => {
     const btn = el('button', { class: 'state-btn' + (ligne.etat === s.code ? ' active' : ''), text: s.label });
@@ -2159,6 +2186,9 @@ async function generatePDF(insp) {
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(7);
     const substratLines = ligne.substrat ? doc.splitTextToSize('Substrat : ' + ligne.substrat, COL.critere - 10) : [];
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    const modifLines = ligne.substratModifie ? doc.splitTextToSize('⚠ Modification constatée à la sortie', COL.critere - 10) : [];
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     const commentLines = ligne.commentaire ? doc.splitTextToSize(ligne.commentaire, COL.commentaire - 10) : [];
@@ -2169,7 +2199,7 @@ async function generatePDF(insp) {
     const photoLines = photos.length ? Math.ceil(photos.length / photosPerLine) : 0;
     const photosH = photoLines ? photoLines * (photoThumbH + photoGap) + 8 : 0;
 
-    const critereH = critereLines.length * 10 + substratLines.length * 9 + 10;
+    const critereH = critereLines.length * 10 + substratLines.length * 9 + modifLines.length * 9 + 10;
     const commentH = commentLines.length * 10 + 10;
     const rowH = Math.max(24, critereH, commentH, photosH);
 
@@ -2193,6 +2223,12 @@ async function generatePDF(insp) {
       doc.setFontSize(7);
       doc.setTextColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
       doc.text(substratLines, x + 5, y0 + 12 + critereLines.length * 10 + 6);
+    }
+    if (modifLines.length) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(6.5);
+      doc.setTextColor(203, 58, 46);
+      doc.text(modifLines, x + 5, y0 + 12 + critereLines.length * 10 + 6 + substratLines.length * 9 + 8);
     }
     x += COL.critere;
 
@@ -2409,10 +2445,6 @@ async function generatePDF(insp) {
   });
   state.y += boxH + 20;
 
-  /* ---------------- Conditions générales ---------------- */
-  newPage();
-  sectionTitle('Conditions générales');
-
   function cgvP(text, opts) {
     opts = opts || {};
     doc.setFont('helvetica', opts.bold ? 'bold' : 'normal');
@@ -2427,6 +2459,30 @@ async function generatePDF(insp) {
     });
     state.y += opts.gap !== undefined ? opts.gap : 6;
   }
+
+  /* ---------------- Récapitulatif des éléments dégradés (sortie uniquement) ---------------- */
+  if (insp.type === 'sortie') {
+    const degradedItems = [];
+    (insp.pieces || []).forEach(room => {
+      (room.lignes || []).forEach(l => {
+        if (l.etat === 'ME' || l.etat === 'DEG') {
+          const s = STATE_MAP[l.etat];
+          degradedItems.push([room.nom, l.critere || '(sans nom)', s ? s.label : l.etat, l.commentaire || '']);
+        }
+      });
+    });
+    if (degradedItems.length) {
+      newPage();
+      sectionTitle('Récapitulatif des éléments à réparer ou remplacer');
+      table(['Pièce', 'Élément', 'État', 'Observations'], degradedItems,
+        [95, 110, 65, pageW - 2 * margin - 270]);
+      cgvP('Suite à ces constatations, nous vous transmettons un devis afin de pouvoir réaliser la remise en état de votre bien.', { bold: true, gap: 10 });
+    }
+  }
+
+  /* ---------------- Conditions générales ---------------- */
+  newPage();
+  sectionTitle('Conditions générales');
 
   cgvP("Le présent état des lieux a été établi par la société AGLOCATION, Société par actions simplifiée immatriculée au Registre du Commerce et des Sociétés de La Roche-sur-Yon sous le numéro 107 230 351 R.C.S. La Roche-sur-Yon (SIRET 107 230 351 00010), dont le siège social est situé 13 Rue de Prévôté – 85670 Palluau.");
 
@@ -2489,6 +2545,10 @@ async function generatePDF(insp) {
 
   const filename = 'EDL_' + (insp.type === 'entree' ? 'Entree' : 'Sortie') + '_' +
     (insp.dossier ? insp.dossier.replace(/[^a-zA-Z0-9_-]+/g, '_') : insp.id) + '.pdf';
+
+  insp.pdfGenerated = true;
+  await Store.saveInspection(insp);
+
   doc.save(filename);
 }
 </script>
