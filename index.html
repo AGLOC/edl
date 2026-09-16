@@ -414,17 +414,31 @@ function compressImage(file) {
       const img = new Image();
       img.onerror = () => reject(new Error('image invalide'));
       img.onload = () => {
-        const maxDim = 1280;
-        let w = img.width, h = img.height;
-        if (w > maxDim || h > maxDim) {
-          if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
-          else { w = Math.round(w * maxDim / h); h = maxDim; }
+        const MAX_CHARS = 700000; // marge de sécurité sous la limite de 1 Mo par document Firestore
+        let maxDim = 1280;
+        let quality = 0.62;
+
+        function render(dim, q) {
+          let w = img.width, h = img.height;
+          if (w > dim || h > dim) {
+            if (w > h) { h = Math.round(h * dim / w); w = dim; }
+            else { w = Math.round(w * dim / h); h = dim; }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          return canvas.toDataURL('image/jpeg', q);
         }
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/jpeg', 0.62));
+
+        let out = render(maxDim, quality);
+        let attempts = 0;
+        while (out.length > MAX_CHARS && attempts < 6) {
+          if (quality > 0.4) { quality -= 0.1; } else { maxDim = Math.round(maxDim * 0.8); }
+          out = render(maxDim, quality);
+          attempts++;
+        }
+        resolve(out);
       };
       img.src = reader.result;
     };
@@ -1567,7 +1581,9 @@ function buildSinglePhotoWidget(getId, setId, onChange) {
             const newPid = uid();
             await Store.setPhoto(newPid, dataUrl);
             setId(newPid);
-          } catch (e) { /* ignore fichier illisible */ }
+          } catch (e) {
+            alert('La photo n\'a pas pu être enregistrée (' + (e && e.message ? e.message : 'erreur inconnue') + '). Réessayez, idéalement avec une photo moins lourde.');
+          }
         }
         input.value = '';
         onChange();
@@ -1612,13 +1628,17 @@ function buildPhotoWidget(photoIds, onChange) {
     input.style.display = 'none';
     input.addEventListener('change', async () => {
       const files = Array.from(input.files || []);
+      let failCount = 0;
       for (const f of files) {
         try {
           const dataUrl = await compressImage(f);
           const pid = uid();
           await Store.setPhoto(pid, dataUrl);
           photoIds.push(pid);
-        } catch (e) { /* ignore fichier illisible */ }
+        } catch (e) { failCount++; }
+      }
+      if (failCount > 0) {
+        alert((failCount > 1 ? failCount + ' photos n\'ont' : 'Une photo n\'a') + ' pas pu être enregistrée' + (failCount > 1 ? 's' : '') + '. Réessayez, idéalement avec des photos moins lourdes.');
       }
       input.value = '';
       onChange();
@@ -2031,6 +2051,16 @@ async function generatePDF(insp) {
     if (state.y + h > pageH - 50) newPage();
   }
 
+  function fitBox(durl, maxW, maxH) {
+    try {
+      const props = doc.getImageProperties(durl);
+      const ratio = Math.min(maxW / props.width, maxH / props.height);
+      return { w: props.width * ratio, h: props.height * ratio };
+    } catch (e) {
+      return { w: maxW, h: maxH };
+    }
+  }
+
   function sectionTitle(text) {
     ensureSpace(26);
     doc.setFillColor(LIGHTBLUE[0], LIGHTBLUE[1], LIGHTBLUE[2]);
@@ -2239,7 +2269,9 @@ async function generatePDF(insp) {
         let px = photoColX + 3, py = state.y + 3;
         photos.forEach((durl, pi) => {
           if (pi > 0 && pi % perLine === 0) { px = photoColX + 3; py += thumbH + gap; }
-          try { doc.addImage(durl, 'JPEG', px, py, thumbW, thumbH); } catch (e) { /* image invalide */ }
+          const fit = fitBox(durl, thumbW, thumbH);
+          const offX = (thumbW - fit.w) / 2, offY = (thumbH - fit.h) / 2;
+          try { doc.addImage(durl, 'JPEG', px + offX, py + offY, fit.w, fit.h); } catch (e) { /* image invalide */ }
           px += thumbW + gap;
         });
       } else {
@@ -2397,7 +2429,9 @@ async function generatePDF(insp) {
       let px = x + 3, py = y0 + 4;
       photos.forEach((durl, pi) => {
         if (pi > 0 && pi % photosPerLine === 0) { px = x + 3; py += photoThumbH + photoGap; }
-        try { doc.addImage(durl, 'JPEG', px, py, photoThumbW, photoThumbH); } catch (e) { /* image invalide */ }
+        const fit = fitBox(durl, photoThumbW, photoThumbH);
+        const offX = (photoThumbW - fit.w) / 2, offY = (photoThumbH - fit.h) / 2;
+        try { doc.addImage(durl, 'JPEG', px + offX, py + offY, fit.w, fit.h); } catch (e) { /* image invalide */ }
         px += photoThumbW + photoGap;
       });
     } else {
