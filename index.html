@@ -188,6 +188,9 @@ button, input, select, textarea { font-family: inherit; }
 .checkbox-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 @media (min-width: 560px) { .checkbox-grid { grid-template-columns: 1fr 1fr 1fr; } }
 .check-option { display: flex; align-items: center; gap: 7px; font-size: 13.5px; cursor: pointer; }
+.meuble-toggle-wrap { margin-bottom: 6px; }
+.meuble-toggle { font-weight: 700; color: var(--navy); margin-bottom: 4px; }
+.meuble-toggle input { width: 19px; height: 19px; }
 .check-option input { width: 17px; height: 17px; accent-color: var(--gold-dark); cursor: pointer; }
 
 /* ---------- Photos ---------- */
@@ -358,6 +361,20 @@ const ROOM_PRESETS = {
   'Terrain - Extérieur avant': ['Vue de la pièce et nettoyage', 'Sol', 'Mur', 'Carport / Portail', 'Boîte aux lettres', 'Poubelle'],
   'Terrain - Extérieur arrière': ['Vue de la pièce et nettoyage', 'Sol', 'Terrasse', 'Mur / Clôture', 'Abri de jardin', 'PAC'],
 };
+
+const MEUBLE_PRESETS = {
+  'Séjour / Cuisine': ['Table et chaises', 'Canapé / Fauteuils', 'Réfrigérateur', 'Micro-ondes', 'Vaisselle et ustensiles de cuisine', 'Rideaux / Occultation', 'Luminaire(s) mobile(s)'],
+  'Chambre': ['Lit et sommier', 'Matelas', 'Armoire / Penderie', 'Table de chevet', 'Rideaux / Occultation', 'Luminaire(s) mobile(s)'],
+  'Salle d\'eau / Salle de bain': ['Miroir mobile', 'Meuble de rangement mobile'],
+};
+
+function meubleCriteresForRoom(nom) {
+  if (!nom) return [];
+  if (nom.startsWith('Chambre')) return MEUBLE_PRESETS['Chambre'];
+  if (nom.includes('Séjour') || nom.includes('Cuisine')) return MEUBLE_PRESETS['Séjour / Cuisine'];
+  if (nom.includes('Salle d\'eau') || nom.includes('Salle de bain')) return MEUBLE_PRESETS['Salle d\'eau / Salle de bain'];
+  return [];
+}
 
 const METER_TYPES = ['Électricité HC Saison Basse', 'Électricité HP Saison Basse', 'Électricité HC Saison Haute',
   'Électricité HP Saison Haute', 'Électricité PRM', 'Eau froide', 'Gaz', 'Fibre'];
@@ -739,6 +756,7 @@ function newInspection(type) {
     bienPieces: '',
     bienAdresse: '',
     bienPhoto: null,
+    bienMeuble: false,
     entrantNom: '',
     entrantDate: '',
     sortantDate: '',
@@ -954,6 +972,7 @@ async function duplicateInspection(id) {
   copy.proprietaire = src.proprietaire;
   copy.dateEdl = new Date().toISOString().slice(0, 10);
   copy.bienType = src.bienType;
+  copy.bienMeuble = src.bienMeuble;
   copy.bienPieces = src.bienPieces;
   copy.bienAdresse = src.bienAdresse;
   copy.entrantNom = src.entrantNom;
@@ -1350,16 +1369,21 @@ function buildMandataireCard(m) {
 function generateDefaultRooms(n) {
   const rooms = [];
   if (!n || n < 1) return rooms;
+  const withMeuble = (nom, presetKey) => {
+    const criteres = (ROOM_PRESETS[presetKey] || []).slice();
+    if (CURRENT.bienMeuble) criteres.push(...meubleCriteresForRoom(nom));
+    return newRoom(nom, criteres);
+  };
   if (n === 1) {
-    rooms.push(newRoom('Séjour / Cuisine', ROOM_PRESETS['Séjour / Cuisine']));
+    rooms.push(withMeuble('Séjour / Cuisine', 'Séjour / Cuisine'));
   } else {
-    rooms.push(newRoom('Séjour / Cuisine', ROOM_PRESETS['Séjour / Cuisine']));
+    rooms.push(withMeuble('Séjour / Cuisine', 'Séjour / Cuisine'));
     for (let i = 1; i <= n - 1; i++) {
-      rooms.push(newRoom('Chambre ' + i, ROOM_PRESETS['Chambre']));
+      rooms.push(withMeuble('Chambre ' + i, 'Chambre'));
     }
   }
   rooms.push(newRoom('Dégagement / Couloir', ROOM_PRESETS['Dégagement / Couloir']));
-  rooms.push(newRoom('Salle d\'eau / Salle de bain', ROOM_PRESETS['Salle d\'eau / Salle de bain']));
+  rooms.push(withMeuble('Salle d\'eau / Salle de bain', 'Salle d\'eau / Salle de bain'));
   rooms.push(newRoom('WC', ROOM_PRESETS['WC']));
   return rooms;
 }
@@ -1384,6 +1408,36 @@ function buildBienPiecesField() {
   return wrap;
 }
 
+function buildMeubleToggle() {
+  const wrap = el('div', { class: 'meuble-toggle-wrap' });
+  const label = el('label', { class: 'check-option meuble-toggle' });
+  const cb = el('input', { attrs: { type: 'checkbox' } });
+  cb.checked = !!CURRENT.bienMeuble;
+  cb.addEventListener('change', () => {
+    CURRENT.bienMeuble = cb.checked;
+    markDirty();
+    if (cb.checked) {
+      let added = 0;
+      (CURRENT.pieces || []).forEach(room => {
+        const criteres = meubleCriteresForRoom(room.nom);
+        const existingNames = new Set(room.lignes.map(l => l.critere));
+        criteres.forEach(c => {
+          if (!existingNames.has(c)) { room.lignes.push(newLigne(c)); added++; }
+        });
+      });
+      if (added > 0) alert(added + ' ligne(s) de mobilier ont été ajoutées dans les pièces existantes (onglet Pièces).');
+    }
+  });
+  label.appendChild(cb);
+  label.appendChild(el('span', { text: 'Ce logement est meublé' }));
+  wrap.appendChild(label);
+  wrap.appendChild(el('div', {
+    class: 'field-hint',
+    text: 'Ajoute automatiquement les éléments de mobilier (lit, canapé, électroménager...) dans les pièces concernées, en plus des critères habituels du logement.'
+  }));
+  return wrap;
+}
+
 function buildGeneralTab(content) {
   const grid = el('div', { class: 'form-grid' });
   grid.appendChild(buildDossierField());
@@ -1399,6 +1453,7 @@ function buildGeneralTab(content) {
   gridBien.appendChild(buildBienPiecesField());
   gridBien.appendChild(field('Adresse du bien', CURRENT.bienAdresse, v => CURRENT.bienAdresse = v, { wide: true }));
   const bienBox = sectionBox('Informations sur le bien', gridBien);
+  bienBox.appendChild(buildMeubleToggle());
   bienBox.appendChild(el('div', { class: 'field-hint', text: 'Photo du bien (affichée en grand sur la page de garde du PDF).' }));
   bienBox.appendChild(buildSinglePhotoWidget(() => CURRENT.bienPhoto, v => CURRENT.bienPhoto = v, () => markDirty()));
   content.appendChild(bienBox);
