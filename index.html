@@ -2648,7 +2648,6 @@ async function generatePDF(insp) {
   }
 
   /* ---------------- page signatures ---------------- */
-  newPage();
   sectionTitle('Signatures des parties');
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
   const legal = "Les parties reconnaissent avoir pris connaissance de la totalité du présent état des lieux et en attestent l'exactitude. Ce document, établi contradictoirement, fait partie intégrante du contrat de location et ne peut en être dissocié, conformément à l'article 3-2 de la loi n°89-462 du 6 juillet 1989 et au décret n°2016-382 du 30 mars 2016.";
@@ -2685,16 +2684,16 @@ async function generatePDF(insp) {
   function cgvP(text, opts) {
     opts = opts || {};
     doc.setFont('helvetica', opts.bold ? 'bold' : 'normal');
-    doc.setFontSize(opts.size || 8);
+    doc.setFontSize(opts.size || 7.5);
     doc.setTextColor(NAVY[0], NAVY[1], NAVY[2]);
     const lines = doc.splitTextToSize(text, pageW - 2 * margin - (opts.indent || 0));
-    const lineH = 9.5;
+    const lineH = 8.8;
     lines.forEach(line => {
       ensureSpace(lineH);
       doc.text(line, margin + (opts.indent || 0), state.y);
       state.y += lineH;
     });
-    state.y += opts.gap !== undefined ? opts.gap : 6;
+    state.y += opts.gap !== undefined ? opts.gap : 4;
   }
 
   /* ---------------- Comparatif avec l'état des lieux d'entrée (si ce dossier en est issu) ---------------- */
