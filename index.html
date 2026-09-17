@@ -235,6 +235,10 @@ button, input, select, textarea { font-family: inherit; }
   padding: 5px 11px; font-size: 12px; cursor: pointer; font-weight: 500;
 }
 .chip:hover { background: #d9f0fc; }
+.quick-meuble { align-items: center; }
+.quick-meuble-label { font-size: 12px; color: var(--subtle); font-weight: 600; width: 100%; margin-bottom: 2px; }
+.chip-meuble { background: #fdf3e7; border-color: var(--gold); color: var(--gold-dark); }
+.chip-meuble:hover { background: #fbe8cf; }
 .lignes-wrap { display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px; }
 
 .ligne-row {
@@ -251,6 +255,12 @@ button, input, select, textarea { font-family: inherit; }
   font-size: 12.5px; font-style: italic; color: var(--subtle); padding: 3px 2px; margin-bottom: 8px;
 }
 .substrat-input:focus { outline: none; border-color: var(--gold); }
+.quantite-wrap { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.quantite-wrap label { font-size: 12px; color: var(--subtle); font-weight: 600; }
+.quantite-input {
+  width: 60px; border: 1.5px solid var(--border); border-radius: 7px; padding: 5px 8px; font-size: 13px;
+}
+.quantite-input:focus { outline: none; border-color: var(--gold); }
 .substrat-modif-btn {
   display: block; width: 100%; text-align: left; margin-bottom: 8px; padding: 6px 10px;
   border: 1.5px dashed var(--border); border-radius: 7px; background: transparent;
@@ -362,11 +372,34 @@ const ROOM_PRESETS = {
   'Terrain - Extérieur arrière': ['Vue de la pièce et nettoyage', 'Sol', 'Terrasse', 'Mur / Clôture', 'Abri de jardin', 'PAC'],
 };
 
+/* Liste légale obligatoire pour la qualification "meublé" (décret n°2015-981 du 31/07/2015) */
 const MEUBLE_PRESETS = {
-  'Séjour / Cuisine': ['Table et chaises', 'Canapé / Fauteuils', 'Réfrigérateur', 'Micro-ondes', 'Vaisselle et ustensiles de cuisine', 'Rideaux / Occultation', 'Luminaire(s) mobile(s)'],
-  'Chambre': ['Lit et sommier', 'Matelas', 'Armoire / Penderie', 'Table de chevet', 'Rideaux / Occultation', 'Luminaire(s) mobile(s)'],
-  'Salle d\'eau / Salle de bain': ['Miroir mobile', 'Meuble de rangement mobile'],
+  'Séjour / Cuisine': [
+    'Plaques de cuisson',
+    'Four ou four à micro-ondes',
+    'Réfrigérateur',
+    'Congélateur ou compartiment à congélation (-6° maxi)',
+    'Vaisselle en nombre suffisant pour les repas',
+    'Ustensiles de cuisine',
+    'Table',
+    'Sièges',
+    'Étagères de rangement',
+    'Luminaires',
+    'Matériel d\'entretien ménager adapté au logement',
+  ],
+  'Chambre': [
+    'Literie avec couette ou couverture',
+    'Volets ou rideaux dans la chambre',
+  ],
+  'Salle d\'eau / Salle de bain': [],
 };
+
+/* Ameublement "confort" courant, à ajouter facilement pièce par pièce (au-delà du minimum légal) */
+const MEUBLE_EXTRAS = [
+  'Miroir', 'Canapé / Fauteuils', 'Armoire / Penderie', 'Table de chevet',
+  'Décoration murale', 'Tapis', 'Rideaux (hors chambre)', 'Poubelle',
+  'Fer à repasser', 'Sèche-cheveux', 'Télévision', 'Lave-linge', 'Sèche-linge',
+];
 
 function meubleCriteresForRoom(nom) {
   if (!nom) return [];
@@ -782,7 +815,7 @@ function newRoom(name, criteres) {
 }
 
 function newLigne(critere) {
-  return { id: uid(), critere: critere || '', substrat: '', substratModifie: false, etat: '', commentaire: '', nettoyage: false, verifiable: true, proposerDevis: true, photos: [] };
+  return { id: uid(), critere: critere || '', substrat: '', substratModifie: false, etat: '', commentaire: '', nettoyage: false, verifiable: true, proposerDevis: true, quantite: '', photos: [] };
 }
 
 /* Sanity check point for node --check: end of file */
@@ -1832,6 +1865,36 @@ function buildRoomCard(room) {
   });
   card.appendChild(quick);
 
+  let meubleQuick = null;
+  if (CURRENT.bienMeuble) {
+    meubleQuick = el('div', { class: 'quick-criteres quick-meuble' });
+    card.appendChild(meubleQuick);
+    renderMeubleQuick();
+  }
+
+  function renderMeubleQuick() {
+    if (!meubleQuick) return;
+    meubleQuick.innerHTML = '';
+    const existingNames = new Set(room.lignes.map(l => l.critere));
+    const available = MEUBLE_EXTRAS.filter(c => !existingNames.has(c));
+    if (!available.length) return;
+    meubleQuick.appendChild(el('span', { class: 'quick-meuble-label', text: 'Ameublement à ajouter :' }));
+    available.forEach(c => {
+      meubleQuick.appendChild(el('button', {
+        class: 'chip chip-meuble', text: '+ ' + c,
+        on: {
+          click: () => {
+            const l = newLigne(c);
+            room.lignes.push(l);
+            markDirty();
+            lignesWrap.appendChild(buildLigneRow(room, l));
+            renderMeubleQuick();
+          }
+        }
+      }));
+    });
+  }
+
   const lignesWrap = el('div', { class: 'lignes-wrap' });
   room.lignes.forEach(l => lignesWrap.appendChild(buildLigneRow(room, l)));
   card.appendChild(lignesWrap);
@@ -1870,6 +1933,16 @@ function buildLigneRow(room, ligne) {
   substratInput.value = ligne.substrat || '';
   substratInput.addEventListener('input', () => { ligne.substrat = substratInput.value; markDirty(); });
   row.appendChild(substratInput);
+
+  if (CURRENT.bienMeuble) {
+    const qteWrap = el('div', { class: 'quantite-wrap' });
+    qteWrap.appendChild(el('label', { text: 'Qté' }));
+    const qteInput = el('input', { class: 'quantite-input', attrs: { type: 'text', inputmode: 'numeric', placeholder: '—' } });
+    qteInput.value = ligne.quantite || '';
+    qteInput.addEventListener('input', () => { ligne.quantite = qteInput.value; markDirty(); });
+    qteWrap.appendChild(qteInput);
+    row.appendChild(qteWrap);
+  }
 
   if (CURRENT.type === 'sortie') {
     const modifBtn = el('button', {
@@ -2449,7 +2522,8 @@ async function generatePDF(insp) {
   function drawLigne(ligne) {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8.5);
-    const critereLines = doc.splitTextToSize(ligne.critere || '(sans nom)', COL.critere - 10);
+    const critereText = (ligne.critere || '(sans nom)') + (ligne.quantite ? ' (Qté : ' + ligne.quantite + ')' : '');
+    const critereLines = doc.splitTextToSize(critereText, COL.critere - 10);
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(7);
     const substratLines = ligne.substrat ? doc.splitTextToSize('Substrat : ' + ligne.substrat, COL.critere - 10) : [];
