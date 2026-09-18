@@ -345,11 +345,12 @@ const KEY_IMAGE_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeYAAA
 
 /* ---------- Constantes charte / métier ---------- */
 const STATES = [
-  { code: 'NEUF', label: 'Neuf',        color: '#1a6b3c' },
-  { code: 'BE',   label: 'Bon état',    color: '#1d4e89' },
-  { code: 'EM',   label: 'État moyen',  color: '#b7770d' },
-  { code: 'ME',   label: 'Mauvais état',color: '#c2410c' },
-  { code: 'DEG',  label: 'Dégradé',     color: '#b03a2e' },
+  { code: 'N',  label: 'Neuf',           desc: 'État neuf / jamais utilisé',                              color: '#1a6b3c' },
+  { code: 'TB', label: 'Très bon état',  desc: 'Pas de traces d\'usage',                                  color: '#1d7a4c' },
+  { code: 'BE', label: 'Bon état',       desc: 'État conforme à un usage normal',                         color: '#1d4e89' },
+  { code: 'EU', label: 'État d\'usage',  desc: 'Traces d\'usure liées à l\'utilisation normale',          color: '#b7770d' },
+  { code: 'D',  label: 'Dégradé',        desc: 'Dégradation anormale nécessitant une réparation ou un remplacement', color: '#c2410c' },
+  { code: 'HS', label: 'Hors service',   desc: 'Ne fonctionne pas',                                       color: '#b03a2e' },
 ];
 const STATE_MAP = Object.fromEntries(STATES.map(s => [s.code, s]));
 
@@ -791,8 +792,12 @@ function newInspection(type) {
     bienPhoto: null,
     bienMeuble: false,
     entrantNom: '',
+    entrantEmail: '',
     entrantDate: '',
     sortantDate: '',
+    sortantNouvelleAdresse: '',
+    sortantTelephone: '',
+    sortantEmail: '',
     fournisseurTel: '', fournisseurGaz: '', fournisseurElec: '',
     cles: [{ nombre: '2', numero: '', obs: 'Porte d\'entrée' }],
     clesPhoto: null,
@@ -1009,6 +1014,7 @@ async function duplicateInspection(id) {
   copy.bienPieces = src.bienPieces;
   copy.bienAdresse = src.bienAdresse;
   copy.entrantNom = src.entrantNom;
+  copy.sortantEmail = src.entrantEmail;
   copy.fournisseurTel = src.fournisseurTel;
   copy.fournisseurGaz = src.fournisseurGaz;
   copy.fournisseurElec = src.fournisseurElec;
@@ -1495,8 +1501,12 @@ function buildGeneralTab(content) {
   if (CURRENT.type === 'entree') {
     grid2.appendChild(readOnlyField('Date et heure d\'entrée', fmtDateTime(CURRENT.entrantDate)));
     grid2.appendChild(field('Nom & prénom locataire', CURRENT.entrantNom, v => CURRENT.entrantNom = v));
+    grid2.appendChild(field('E-mail du locataire', CURRENT.entrantEmail, v => CURRENT.entrantEmail = v));
   } else {
     grid2.appendChild(readOnlyField('Date et heure de sortie', fmtDateTime(CURRENT.sortantDate)));
+    grid2.appendChild(field('Nouvelle adresse / lieu d\'hébergement', CURRENT.sortantNouvelleAdresse, v => CURRENT.sortantNouvelleAdresse = v, { wide: true }));
+    grid2.appendChild(field('Téléphone du locataire', CURRENT.sortantTelephone, v => CURRENT.sortantTelephone = v));
+    grid2.appendChild(field('E-mail du locataire', CURRENT.sortantEmail, v => CURRENT.sortantEmail = v));
   }
   content.appendChild(sectionBox('Locataires', grid2));
 
@@ -2031,7 +2041,7 @@ function buildRecapTab(content) {
   const incomplets = [];
   CURRENT.pieces.forEach(room => {
     room.lignes.forEach(l => {
-      if (l.etat === 'DEG') degrades.push({ room: room.nom, l });
+      if (l.etat === 'D' || l.etat === 'HS') degrades.push({ room: room.nom, l });
       if (l.nettoyage) incomplets.push({ room: room.nom, l });
     });
   });
@@ -2214,7 +2224,7 @@ async function generatePDF(insp) {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(NAVY[0], NAVY[1], NAVY[2]);
-    doc.text('https://ag-location.webflow.io   ·   accueil@aglocation.fr', pageW / 2, pageH - 32, { align: 'center' });
+    doc.text('https://aglocation.fr   ·   accueil@aglocation.fr', pageW / 2, pageH - 32, { align: 'center' });
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
@@ -2478,11 +2488,11 @@ async function generatePDF(insp) {
     state.y += 12;
   }
 
-  const ETAT_COLS = ['NEUF', 'BE', 'EM', 'ME', 'DEG'];
-  const ETAT_LABELS = { NEUF: 'Neuf', BE: 'B.E.', EM: 'E.M.', ME: 'M.E.', DEG: 'DEG' };
+  const ETAT_COLS = ['N', 'TB', 'BE', 'EU', 'D', 'HS'];
+  const ETAT_LABELS = { N: 'N', TB: 'TB', BE: 'BE', EU: 'EU', D: 'D', HS: 'HS' };
   const COL = {
     critere: 70,
-    etat: 18,
+    etat: 15,
     nettoyage: 40,
     verifiable: 38,
     photos: 145,
@@ -2674,11 +2684,15 @@ async function generatePDF(insp) {
     [
       ['Date d\'entrée', insp.entrantDate ? fmtDateTime(insp.entrantDate) : ''],
       ['Nom / Prénom', insp.entrantNom],
+      ['E-mail', insp.entrantEmail],
     ],
     'SORTANT',
     [
       ['Date de sortie', insp.sortantDate ? fmtDateTime(insp.sortantDate) : ''],
       ['Nom / Prénom', insp.entrantNom],
+      ['Nouvelle adresse', insp.sortantNouvelleAdresse],
+      ['Téléphone', insp.sortantTelephone],
+      ['E-mail', insp.sortantEmail],
     ]
   );
 
@@ -2757,7 +2771,7 @@ async function generatePDF(insp) {
   const degrades = [];
   const incomplets = [];
   insp.pieces.forEach(room => room.lignes.forEach(l => {
-    if (l.etat === 'DEG') degrades.push({ room: room.nom, l });
+    if (l.etat === 'D' || l.etat === 'HS') degrades.push({ room: room.nom, l });
     if (l.nettoyage) incomplets.push({ room: room.nom, l });
   }));
 
@@ -2875,7 +2889,7 @@ async function generatePDF(insp) {
     const degradedItems = [];
     (insp.pieces || []).forEach(room => {
       (room.lignes || []).forEach(l => {
-        if ((l.etat === 'EM' || l.etat === 'ME' || l.etat === 'DEG') && l.proposerDevis !== false) {
+        if ((l.etat === 'D' || l.etat === 'HS') && l.proposerDevis !== false) {
           const s = STATE_MAP[l.etat];
           degradedItems.push([room.nom, l.critere || '(sans nom)', s ? s.label : l.etat, l.commentaire || '']);
         }
@@ -2897,15 +2911,16 @@ async function generatePDF(insp) {
 
   cgvP("La société AGLOCATION présente toutes les garanties d'indépendance lui permettant de réaliser le présent état des lieux en parfaite objectivité, de manière contradictoire et amiable avec le preneur ou son représentant lors de la remise ou de la restitution des clés.");
 
-  cgvP("Le bailleur et le preneur, ou leur représentant, déclarent que le procédé photographique mis en œuvre par la société AGLOCATION pour l'établissement du présent état des lieux permet une transcription sincère et exacte de l'apparence des lieux visités. Les Parties acceptent et reconnaissent que l'absence de mention portée une photographie figurant à l'état des lieux signifie de manière claire et non équivoque que l'élément représenté est NEUF ou en BON ÉTAT. Tout élément qui ne correspondrait pas à un état NEUF ou en BON ÉTAT ou tout autre fait notable sur l'état des lieux fera l'objet d'une mention expresse de la part de la société AGLOCATION.");
+  cgvP("Le bailleur et le preneur, ou leur représentant, déclarent que le procédé photographique mis en œuvre par la société AGLOCATION pour l'établissement du présent état des lieux permet une transcription sincère et exacte de l'apparence des lieux visités. Les Parties acceptent et reconnaissent que l'absence de mention portée une photographie figurant à l'état des lieux signifie de manière claire et non équivoque que l'élément représenté est NEUF, en TRÈS BON ÉTAT ou en BON ÉTAT. Tout élément qui ne correspondrait pas à l'un de ces états ou tout autre fait notable sur l'état des lieux fera l'objet d'une mention expresse de la part de la société AGLOCATION.");
 
   cgvP("Pour l'établissement de l'état des lieux, les parties acceptent et reconnaissent la définition des termes suivants :", { gap: 4 });
   [
-    'Neuf : état neuf',
-    'Bon état : répond à son état d\'usage',
-    'État moyen : nécessite un entretien',
-    'Mauvais état : nécessite un remplacement',
-    'Dégradé : nécessite une réparation',
+    'Neuf (N) : état neuf / jamais utilisé',
+    'Très bon état (TB) : pas de traces d\'usage',
+    'Bon état (BE) : état conforme à un usage normal',
+    'État d\'usage (EU) : traces d\'usure liées à l\'utilisation normale',
+    'Dégradé (D) : dégradation anormale nécessitant une réparation ou un remplacement',
+    'Hors service (HS) : ne fonctionne pas',
   ].forEach(t => cgvP('•  ' + t, { indent: 8, gap: 2 }));
   state.y += 6;
 
