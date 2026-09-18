@@ -2915,12 +2915,12 @@ async function generatePDF(insp) {
 
   cgvP("Pour l'établissement de l'état des lieux, les parties acceptent et reconnaissent la définition des termes suivants :", { gap: 4 });
   [
-    'Neuf (N) : état neuf / jamais utilisé',
-    'Très bon état (TB) : pas de traces d\'usage',
-    'Bon état (BE) : état conforme à un usage normal',
-    'État d\'usage (EU) : traces d\'usure liées à l\'utilisation normale',
-    'Dégradé (D) : dégradation anormale nécessitant une réparation ou un remplacement',
-    'Hors service (HS) : ne fonctionne pas',
+    'Neuf (N) : état neuf ou jamais utilisé.',
+    'Très bon état (TB) : état proche du neuf, sans trace d\'usage notable.',
+    'Bon état (BE) : bon état général, avec éventuellement de très légères traces d\'utilisation, sans usure marquée.',
+    'État d\'usage (EU) : état fonctionnel présentant des traces visibles d\'usure normale liées au temps et à l\'utilisation.',
+    'Dégradé (D) : état présentant une détérioration anormale nécessitant une réparation ou un remplacement.',
+    'Hors service (HS) : élément ne fonctionnant plus ou impropre à son usage.',
   ].forEach(t => cgvP('•  ' + t, { indent: 8, gap: 2 }));
   state.y += 6;
 
