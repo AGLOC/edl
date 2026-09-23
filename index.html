@@ -64,6 +64,22 @@ button, input, select, textarea { font-family: inherit; }
 .brand-logo { display: block; border-radius: 6px; flex-shrink: 0; }
 .dossier-preview { font-size: 12px; color: var(--subtle); margin-top: 4px; }
 .field-hint { font-size: 11px; color: var(--subtle); margin-top: 4px; line-height: 1.4; }
+.onb-table { display: flex; flex-direction: column; gap: 6px; overflow-x: auto; }
+.onb-table-row { display: grid; grid-template-columns: 1.2fr 1.4fr 1.4fr 1fr; gap: 8px; align-items: center; min-width: 480px; }
+.onb-table-row.onb-table-head { font-size: 11px; font-weight: 700; color: var(--subtle); text-transform: uppercase; padding-bottom: 4px; border-bottom: 1.5px solid var(--border); }
+.onb-table-cell input, .onb-table-cell select {
+  width: 100%; border: 1.5px solid var(--border); border-radius: 7px; padding: 7px 8px; font-size: 13px;
+}
+.onb-table-label { font-weight: 600; font-size: 13px; color: var(--navy); }
+.onb-checklist { display: flex; flex-direction: column; gap: 10px; }
+.onb-checklist-item { padding: 8px; border-radius: 8px; background: #fbfcfe; border: 1px solid var(--border); }
+.onb-electro-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.onb-electro-row { padding: 10px; border-radius: 9px; border: 1px solid var(--border); background: #fbfcfe; }
+.onb-electro-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.onb-electro-marque {
+  flex: 1; min-width: 140px; border: 1.5px solid var(--border); border-radius: 7px; padding: 7px 9px; font-size: 13px;
+}
+.onb-electro-photo { margin-top: 10px; }
 .brand { font-size: 20px; font-weight: 700; letter-spacing: 0.5px; }
 .brand-compact { font-size: 16px; }
 .brand-a { color: var(--gold); }
@@ -76,6 +92,7 @@ button, input, select, textarea { font-family: inherit; }
 .tag { padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
 .tag-entree { background: #1a6b3c; color: #fff; }
 .tag-sortie { background: #c2410c; color: #fff; }
+.tag-onb { background: var(--gold-dark); color: #fff; }
 .save-status { font-size: 12px; color: #9fe6b8; margin-left: auto; white-space: nowrap; }
 .save-status.saving { color: var(--gold); }
 
@@ -162,6 +179,10 @@ button, input, select, textarea { font-family: inherit; }
 .cle-row:last-child { border-bottom: none; }
 .cle-row-inputs { display: grid; grid-template-columns: 60px 1fr 2fr 30px; gap: 8px; align-items: center; }
 .cle-row-inputs input {
+  border: 1.5px solid var(--border); border-radius: 7px; padding: 8px; font-size: 13px; width: 100%;
+}
+.onb-cle-row-inputs { display: grid; grid-template-columns: 1fr 70px 30px; gap: 8px; align-items: center; }
+.onb-cle-row-inputs input {
   border: 1.5px solid var(--border); border-radius: 7px; padding: 8px; font-size: 13px; width: 100%;
 }
 
@@ -750,6 +771,38 @@ const Store = {
     const idx = await this.getIndex();
     await this.setIndex(idx.filter(x => x.id !== id));
   },
+  async getOnbIndex() {
+    try {
+      const r = await window.storage.get('onb:index', false);
+      return r ? JSON.parse(r.value) : [];
+    } catch (e) { return []; }
+  },
+  async setOnbIndex(list) {
+    await window.storage.set('onb:index', JSON.stringify(list), false);
+  },
+  async getOnboarding(id) {
+    try {
+      const r = await window.storage.get('onb:data:' + id, false);
+      return r ? JSON.parse(r.value) : null;
+    } catch (e) { return null; }
+  },
+  async saveOnboarding(onb) {
+    onb.updatedAt = new Date().toISOString();
+    await window.storage.set('onb:data:' + onb.id, JSON.stringify(onb), false);
+    const idx = await this.getOnbIndex();
+    const i = idx.findIndex(x => x.id === onb.id);
+    const entry = {
+      id: onb.id, numeroDossier: onb.numeroDossier, statut: onb.statut,
+      proprioNom: onb.proprioNom, bienAdresse: onb.bienAdresse, updatedAt: onb.updatedAt
+    };
+    if (i >= 0) idx[i] = entry; else idx.unshift(entry);
+    await this.setOnbIndex(idx);
+  },
+  async deleteOnboarding(id) {
+    try { await window.storage.delete('onb:data:' + id, false); } catch (e) {}
+    const idx = await this.getOnbIndex();
+    await this.setOnbIndex(idx.filter(x => x.id !== id));
+  },
   async getPhoto(photoId) {
     try {
       const r = await window.storage.get('photo:' + photoId, false);
@@ -774,6 +827,117 @@ function collectPhotoIds(insp) {
 }
 
 /* ---------- Modèle ---------- */
+/* ---------- Modèle Onboarding bien ---------- */
+const CONSOMMABLES_LISTE = [
+  'Gel douche (distributeur AG LOC)', 'Shampoing (distributeur AG LOC)',
+  'Savon liquide mains (distributeur AG LOC)', 'Liquide vaisselle (distributeur AG LOC)',
+  'Papier toilette (rouleaux)', 'Capsules café / sachets thé', 'Sel / poivre / sucre',
+  'Éponges cuisine', 'Pastilles lave-vaisselle', 'Lessive lave-linge', 'Sacs poubelle',
+  'Produits ménagers divers',
+];
+const CHECKLIST_ONBOARDING = [
+  'Visite complète du logement effectuée avec le propriétaire',
+  'Photos du bien prises pour dossier interne (toutes pièces)',
+  'Installation de la serrure connectée AG LOC testée et fonctionnelle',
+  'Installation des distributeurs de produits AG LOC (SDB + cuisine)',
+  'Clés / codes d\'accès récupérés et testés',
+  'Inventaire complet du mobilier et équipements réalisé',
+  'WiFi testé et identifiants notés',
+  'Tous les équipements testés et fonctionnels (électroménager, chauffage, eau chaude)',
+  'DAAF(s) testé(s) et fonctionnel(s)',
+  'Mise en place des affichages voyageurs et consignes d\'utilisation AG LOC',
+  'Prise de photos professionnelles pour l\'annonce',
+  'Annonces créées / reprises sur les plateformes',
+  'Bien synchronisé sur le channel manager (Hostaway)',
+  'Tarifs et règles de séjour paramétrés',
+  'Messagerie automatique configurée (confirmation, rappel, arrivée, départ)',
+  'Procédure d\'entretien personnalisée mise en place pour l\'équipe ménage',
+  'Fiche de ménage adaptée au bien créée',
+  'Livret d\'accueil voyageur AG Location rédigé et en place',
+  'Agent ménage / prestataire briefé sur le bien',
+  'Contrat de prestation de services signé avec le propriétaire',
+  'Coordonnées bancaires propriétaire enregistrées pour reversement',
+  'Premier séjour planifié et confirmé avec le propriétaire',
+];
+const PLATEFORMES_LISTE = ['Airbnb', 'Booking.com', 'Abritel / Vrbo', 'Gîtes de France'];
+const ELECTROMENAGER_LISTE = [
+  /* Électroménager */
+  'Réfrigérateur', 'Congélateur', 'Plaques de cuisson', 'Four', 'Micro-ondes', 'Hotte aspirante',
+  'Lave-linge', 'Sèche-linge', 'Lave-vaisselle', 'Climatisation', 'Grille-pain', 'Bouilloire',
+  'Machine à café', 'Mixeur / Robot cuisine', 'Aspirateur', 'Fer à repasser',
+  /* Mobilier & équipements du logement */
+  'Canapé / Fauteuils', 'Table & chaises', 'Lit(s) & sommier', 'Matelas', 'Armoire / Penderie',
+  'Table de chevet', 'Étagères de rangement', 'Luminaires', 'Rideaux / Volets', 'Miroir',
+  'Décoration murale', 'Tapis', 'Vaisselle & ustensiles de cuisine', 'Poubelle',
+];
+
+function newOnboarding() {
+  const now = new Date().toISOString();
+  return {
+    id: uid(),
+    numeroDossier: '', dateOnboarding: now.slice(0, 10), statut: 'En cours',
+    /* 1. Propriétaire */
+    proprioNom: '', proprioRaisonSociale: '', proprioAdresse: '',
+    proprioTelPrincipal: '', proprioTelSecondaire: '', proprioEmail: '',
+    proprioContactPref: [], proprioDispo: '', proprioContactUrgence: '', proprioTelUrgence: '',
+    proprioRIB: '', proprioNumDeclarationMairie: '', proprioSiret: '',
+    /* 2. Description du bien */
+    bienNom: '', bienAdresse: '', bienEtageBatPorte: '', bienCodeAccesImmeuble: '',
+    bienType: '', bienSurface: '', bienNbPieces: '', bienNbChambres: '', bienCapacite: '', bienNbLitsDetail: '',
+    bienParking: false, bienParkingNum: '',
+    bienExterieurs: [],
+    bienCave: false, bienCaveNum: '',
+    bienMonoCopro: '', bienLCDAutorisee: '', bienSyndicNom: '', bienSyndicContact: '', bienReglesCopro: '',
+    bienAssuranceHabitation: '',
+    /* 3. Accès */
+    accesModes: [], accesMarqueSerrure: '', accesCodeBoite: '', accesEmplacementBoite: '',
+    accesCodeDigicode: '', accesCodePortail: '', accesCodeInterphone: '',
+    accesBadgeGarage: false, accesBadgeGarageNb: '',
+    clesInventaire: [{ nombre: '2', numero: '', obs: 'Porte d\'entrée' }], clesPhoto: null,
+    accesNbClesLogement: '', accesNbClesBoiteLettres: '',
+    accesAutresCles: '', accesLocalisationDoubles: '',
+    checkinHeure: '', checkinAnticipe: '', checkinAnticipeHeure: '',
+    checkoutHeure: '', checkoutTardif: '', checkoutTardifHeure: '',
+    checkinMode: '', accesInstructions: '',
+    /* 4. Équipements */
+    chauffageType: '', chauffageMarque: '', chauffageDateEntretien: '',
+    eauChaudeType: '', eauChaudeRef: '',
+    elecPuissance: '', elecEmplacementTableau: '', elecFournisseur: '', elecNumCompteur: '',
+    internetOperateur: '', wifiSSID: '', wifiPassword: '', internetType: '',
+    electromenager: ELECTROMENAGER_LISTE.map(nom => ({ nom, present: false, marque: '', photo: null })),
+    tv: false, tvTaille: '', tvSmart: false, tvAbonnement: '', tvCodes: '', tvPhoto: null,
+    daaf: false, daafNb: '', daafDateVerif: '',
+    detecteurCO: false,
+    extincteur: false, extincteurDate: '',
+    alarme: false, alarmeCode: '', alarmeSociete: '',
+    camerasExt: false, camerasEmplacement: '',
+    /* 5. Plateformes & tarification */
+    plateformes: PLATEFORMES_LISTE.map(nom => ({ nom, url: '', acces: '', statut: 'Inactif' })).concat([{ nom: 'Autre', url: '', acces: '', statut: 'Inactif' }]),
+    prixBasse: '', prixMoyenne: '', prixHaute: '', prixMin: '', sejourMin: '',
+    fraisMenage: '', fraisMenageInclus: false, caution: '', cautionNonDemandee: false,
+    channelManager: '', channelManagerAcces: '', reglesTarifairesSpeciales: '',
+    /* 6. Règles & consignes */
+    animaux: '', animauxSupplement: '', fumeurs: '', fumeursZones: '',
+    fetes: '', nbMaxVoyageurs: '', enfants: '', heureSilence: '',
+    reglesStationnement: '', poubellesJours: '', reglesSpecifiques: '',
+    piecesInterdites: '', objetsPersonnels: '', instructionsJardin: '',
+    /* 7. Consommables */
+    consommables: CONSOMMABLES_LISTE.map(article => ({ article, responsable: 'AG LOC', notes: '' })),
+    /* 9. Checklist */
+    checklist: CHECKLIST_ONBOARDING.map(label => ({ label, checked: false })),
+    /* 10. Notes */
+    notes: '',
+    /* Validation */
+    signatures: { proprietaire: null, responsable: null },
+    signatureProprioNom: '', signatureResponsableNom: '',
+    createdAt: now, updatedAt: now,
+  };
+}
+
+function isOnboardingComplete(onb) {
+  return (onb.checklist || []).length > 0 && onb.checklist.every(c => c.checked);
+}
+
 function newInspection(type) {
   const now = new Date().toISOString();
   return {
@@ -830,6 +994,7 @@ function newLigne(critere) {
 
 const App = document.getElementById('app');
 let CURRENT = null;           // inspection en cours d'édition
+let CURRENT_ONB = null;       // fiche d'onboarding en cours d'édition
 let SAVE_STATUS = null;       // ref DOM au badge de sauvegarde
 let MANDATAIRES_CACHE = [];   // cache des mandataires/agences enregistrés
 let TECHNICIENS_CACHE = [];   // cache des techniciens enregistrés
@@ -866,6 +1031,17 @@ function markDirty() {
   scheduleSave();
 }
 
+const scheduleSaveOnb = debounce(async () => {
+  if (!CURRENT_ONB) return;
+  await Store.saveOnboarding(CURRENT_ONB);
+  if (SAVE_STATUS) { SAVE_STATUS.textContent = 'Enregistré ✓'; SAVE_STATUS.classList.remove('saving'); }
+}, 500);
+
+function markDirtyOnb() {
+  if (SAVE_STATUS) { SAVE_STATUS.textContent = 'Enregistrement…'; SAVE_STATUS.classList.add('saving'); }
+  scheduleSaveOnb();
+}
+
 /* ---------------------------- ECRAN ACCUEIL ---------------------------- */
 
 async function renderHome() {
@@ -878,6 +1054,7 @@ async function renderHome() {
   header.appendChild(el('div', { class: 'brand', html: '<span class="brand-a">AG</span>LOC' }));
   header.appendChild(el('div', { class: 'brand-sub', text: 'États des lieux' }));
   header.appendChild(el('button', { class: 'btn-back nav-right', text: '✅ États des lieux réalisés', on: { click: renderCompleted } }));
+  header.appendChild(el('button', { class: 'btn-back', text: '🏠 Onboarding', on: { click: renderOnbHome } }));
   header.appendChild(el('button', { class: 'btn-back', text: '🗂️ Mandataires & agences', on: { click: renderMandataires } }));
   App.appendChild(header);
 
@@ -990,6 +1167,68 @@ function buildInspectionCard(entry) {
   row.appendChild(el('button', { class: 'btn btn-danger btn-sm', text: 'Supprimer', on: { click: () => deleteInspectionConfirm(entry.id) } }));
   card.appendChild(row);
   return card;
+}
+
+async function renderOnbHome() {
+  const list = await Store.getOnbIndex();
+  App.innerHTML = '';
+
+  const header = el('div', { class: 'topbar' });
+  header.appendChild(el('button', { class: 'btn-back', text: '← Accueil', on: { click: renderHome } }));
+  header.appendChild(brandLogo(28));
+  header.appendChild(el('div', { class: 'brand brand-compact', html: '<span class="brand-a">AG</span>LOC' }));
+  header.appendChild(el('div', { class: 'insp-header-title', text: 'Onboarding biens' }));
+  App.appendChild(header);
+
+  const wrap = el('div', { class: 'page' });
+  wrap.appendChild(el('button', {
+    class: 'btn btn-primary btn-lg', text: '+ Nouveau bien à intégrer',
+    on: { click: openNewOnboarding }
+  }));
+
+  wrap.appendChild(el('h2', { class: 'section-title', text: 'Biens en cours d\'intégration' }));
+  if (!list.length) {
+    wrap.appendChild(el('p', { class: 'empty', text: 'Aucun onboarding en cours. Créez-en un ci-dessus.' }));
+  } else {
+    const grid = el('div', { class: 'card-grid' });
+    list.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+    list.forEach(entry => grid.appendChild(buildOnbCard(entry)));
+    wrap.appendChild(grid);
+  }
+  App.appendChild(wrap);
+}
+
+function buildOnbCard(entry) {
+  const card = el('div', { class: 'insp-card' });
+  card.appendChild(el('div', { class: 'insp-card-tag', text: entry.statut || 'En cours' }));
+  card.appendChild(el('div', { class: 'insp-card-title', text: entry.proprioNom || 'Propriétaire non renseigné' }));
+  card.appendChild(el('div', { class: 'insp-card-sub', text: entry.bienAdresse || 'Adresse non renseignée' }));
+  card.appendChild(el('div', { class: 'insp-card-date', text: 'Modifié le ' + fmtDate(entry.updatedAt) }));
+  const row = el('div', { class: 'insp-card-actions' });
+  row.appendChild(el('button', { class: 'btn btn-primary btn-sm', text: 'Ouvrir', on: { click: () => openOnboarding(entry.id) } }));
+  row.appendChild(el('button', { class: 'btn btn-danger btn-sm', text: 'Supprimer', on: { click: () => deleteOnboardingConfirm(entry.id) } }));
+  card.appendChild(row);
+  return card;
+}
+
+async function deleteOnboardingConfirm(id) {
+  if (!confirm('Supprimer définitivement cette fiche d\'onboarding ?')) return;
+  await Store.deleteOnboarding(id);
+  renderOnbHome();
+}
+
+async function openNewOnboarding() {
+  const onb = newOnboarding();
+  CURRENT_ONB = onb;
+  await Store.saveOnboarding(onb);
+  renderOnbEditor('proprio');
+}
+
+async function openOnboarding(id) {
+  const onb = await Store.getOnboarding(id);
+  if (!onb) { renderOnbHome(); return; }
+  CURRENT_ONB = onb;
+  renderOnbEditor('proprio');
 }
 
 async function deleteInspectionConfirm(id) {
@@ -2156,6 +2395,580 @@ function buildSignaturePad(key, label) {
   });
   box.appendChild(clearBtn);
   return box;
+}
+
+/* ==========================================================================
+   MODULE ONBOARDING — helpers de champs
+   ========================================================================== */
+function ofield(label, value, onInput, opts) {
+  opts = opts || {};
+  const wrap = el('div', { class: 'field' + (opts.wide ? ' field-wide' : '') });
+  wrap.appendChild(el('label', { text: label }));
+  const input = el(opts.textarea ? 'textarea' : 'input', {
+    attrs: opts.textarea ? { rows: opts.rows || 2 } : { type: opts.type || 'text' }
+  });
+  input.value = value || '';
+  input.addEventListener('input', () => { onInput(input.value); markDirtyOnb(); });
+  wrap.appendChild(input);
+  return wrap;
+}
+
+function oselect(label, value, options, onInput) {
+  const wrap = el('div', { class: 'field' });
+  wrap.appendChild(el('label', { text: label }));
+  const select = el('select');
+  const empty = el('option', { text: '—' }); empty.value = '';
+  select.appendChild(empty);
+  options.forEach(opt => {
+    const o = el('option', { text: opt }); o.value = opt;
+    if (value === opt) o.selected = true;
+    select.appendChild(o);
+  });
+  select.addEventListener('change', () => { onInput(select.value); markDirtyOnb(); });
+  wrap.appendChild(select);
+  return wrap;
+}
+
+function ocheckboxDetail(label, checked, onToggle, opts) {
+  opts = opts || {};
+  const wrap = el('div', { class: 'field' });
+  const lab = el('label', { class: 'check-option' });
+  const cb = el('input', { attrs: { type: 'checkbox' } });
+  cb.checked = !!checked;
+  lab.appendChild(cb); lab.appendChild(el('span', { text: label }));
+  wrap.appendChild(lab);
+  const details = [];
+  (opts.details || []).forEach(d => {
+    const input = el('input', { attrs: { type: 'text', placeholder: d.placeholder || '' } });
+    input.value = d.value || '';
+    input.style.marginTop = '6px';
+    input.style.display = checked ? 'block' : 'none';
+    input.addEventListener('input', () => { d.onInput(input.value); markDirtyOnb(); });
+    wrap.appendChild(input);
+    details.push(input);
+  });
+  cb.addEventListener('change', () => {
+    onToggle(cb.checked);
+    markDirtyOnb();
+    details.forEach(inp => inp.style.display = cb.checked ? 'block' : 'none');
+  });
+  return wrap;
+}
+
+function ocheckboxGroup(label, options, selectedArray) {
+  const wrap = el('div', { class: 'field field-wide' });
+  wrap.appendChild(el('label', { text: label }));
+  const row = el('div', { class: 'checkbox-grid' });
+  options.forEach(opt => {
+    const lab = el('label', { class: 'check-option' });
+    const cb = el('input', { attrs: { type: 'checkbox' } });
+    cb.checked = selectedArray.includes(opt);
+    cb.addEventListener('change', () => {
+      const i = selectedArray.indexOf(opt);
+      if (cb.checked) { if (i < 0) selectedArray.push(opt); }
+      else if (i >= 0) selectedArray.splice(i, 1);
+      markDirtyOnb();
+    });
+    lab.appendChild(cb); lab.appendChild(el('span', { text: opt }));
+    row.appendChild(lab);
+  });
+  wrap.appendChild(row);
+  return wrap;
+}
+
+function obox(title, inner) {
+  const box = el('div', { class: 'box' });
+  box.appendChild(el('h3', { class: 'box-title', text: title }));
+  box.appendChild(inner);
+  return box;
+}
+
+/* Table éditable simple (plateformes / prestataires / consommables) */
+function oMiniTable(headers, rows, rowBuilder) {
+  const table = el('div', { class: 'onb-table' });
+  const headRow = el('div', { class: 'onb-table-row onb-table-head' });
+  headers.forEach(h => headRow.appendChild(el('div', { class: 'onb-table-cell', text: h })));
+  table.appendChild(headRow);
+  rows.forEach((row, i) => table.appendChild(rowBuilder(row, i)));
+  return table;
+}
+
+/* ---------------------------- ONGLETS ONBOARDING ---------------------------- */
+
+function buildOnbProprioTab(content) {
+  const g1 = el('div', { class: 'form-grid' });
+  g1.appendChild(ofield('N° dossier', CURRENT_ONB.numeroDossier, v => CURRENT_ONB.numeroDossier = v));
+  g1.appendChild(ofield('Date d\'onboarding', CURRENT_ONB.dateOnboarding, v => CURRENT_ONB.dateOnboarding = v, { type: 'date' }));
+  g1.appendChild(oselect('Statut', CURRENT_ONB.statut, ['En cours', 'Terminé', 'Bloqué'], v => CURRENT_ONB.statut = v));
+  content.appendChild(obox('Dossier', g1));
+
+  const g2 = el('div', { class: 'form-grid' });
+  g2.appendChild(ofield('Nom / Prénom', CURRENT_ONB.proprioNom, v => CURRENT_ONB.proprioNom = v));
+  g2.appendChild(ofield('Raison sociale (si SCI/société)', CURRENT_ONB.proprioRaisonSociale, v => CURRENT_ONB.proprioRaisonSociale = v));
+  g2.appendChild(ofield('Adresse personnelle', CURRENT_ONB.proprioAdresse, v => CURRENT_ONB.proprioAdresse = v, { wide: true }));
+  g2.appendChild(ofield('Téléphone principal', CURRENT_ONB.proprioTelPrincipal, v => CURRENT_ONB.proprioTelPrincipal = v));
+  g2.appendChild(ofield('Téléphone secondaire', CURRENT_ONB.proprioTelSecondaire, v => CURRENT_ONB.proprioTelSecondaire = v));
+  g2.appendChild(ofield('E-mail', CURRENT_ONB.proprioEmail, v => CURRENT_ONB.proprioEmail = v));
+  g2.appendChild(ocheckboxGroup('Moyen de contact préféré', ['Téléphone', 'SMS', 'Email', 'WhatsApp'], CURRENT_ONB.proprioContactPref));
+  g2.appendChild(ofield('Disponibilités habituelles', CURRENT_ONB.proprioDispo, v => CURRENT_ONB.proprioDispo = v));
+  g2.appendChild(ofield('Contact d\'urgence (si absent)', CURRENT_ONB.proprioContactUrgence, v => CURRENT_ONB.proprioContactUrgence = v));
+  g2.appendChild(ofield('Téléphone contact urgence', CURRENT_ONB.proprioTelUrgence, v => CURRENT_ONB.proprioTelUrgence = v));
+  g2.appendChild(ofield('RIB / IBAN (pour reversement)', CURRENT_ONB.proprioRIB, v => CURRENT_ONB.proprioRIB = v));
+  g2.appendChild(ofield('Numéro de déclaration mairie', CURRENT_ONB.proprioNumDeclarationMairie, v => CURRENT_ONB.proprioNumDeclarationMairie = v));
+  g2.appendChild(ofield('Numéro de SIRET (si applicable)', CURRENT_ONB.proprioSiret, v => CURRENT_ONB.proprioSiret = v));
+  content.appendChild(obox('Informations propriétaire', g2));
+}
+
+function buildOnbBienTab(content) {
+  const g = el('div', { class: 'form-grid' });
+  g.appendChild(ofield('Nom du bien', CURRENT_ONB.bienNom, v => CURRENT_ONB.bienNom = v, { wide: true }));
+  g.appendChild(ofield('Adresse complète', CURRENT_ONB.bienAdresse, v => CURRENT_ONB.bienAdresse = v, { wide: true }));
+  g.appendChild(ofield('Étage / Bâtiment / Porte', CURRENT_ONB.bienEtageBatPorte, v => CURRENT_ONB.bienEtageBatPorte = v));
+  g.appendChild(ofield('Code d\'accès immeuble', CURRENT_ONB.bienCodeAccesImmeuble, v => CURRENT_ONB.bienCodeAccesImmeuble = v));
+  g.appendChild(oselect('Type de bien', CURRENT_ONB.bienType, ['Appartement', 'Maison', 'Studio', 'Loft', 'Villa'], v => CURRENT_ONB.bienType = v));
+  g.appendChild(ofield('Surface habitable (m²)', CURRENT_ONB.bienSurface, v => CURRENT_ONB.bienSurface = v));
+  g.appendChild(ofield('Nombre de pièces', CURRENT_ONB.bienNbPieces, v => CURRENT_ONB.bienNbPieces = v));
+  g.appendChild(ofield('Nombre de chambres', CURRENT_ONB.bienNbChambres, v => CURRENT_ONB.bienNbChambres = v));
+  g.appendChild(ofield('Capacité d\'accueil (voyageurs)', CURRENT_ONB.bienCapacite, v => CURRENT_ONB.bienCapacite = v));
+  g.appendChild(ofield('Nombre de lits (détail)', CURRENT_ONB.bienNbLitsDetail, v => CURRENT_ONB.bienNbLitsDetail = v, { wide: true }));
+  content.appendChild(obox('Localisation & caractéristiques', g));
+
+  const g2 = el('div', { class: 'form-grid' });
+  g2.appendChild(ocheckboxDetail('Parking / Garage', CURRENT_ONB.bienParking, v => CURRENT_ONB.bienParking = v, {
+    details: [{ value: CURRENT_ONB.bienParkingNum, placeholder: 'N° de place', onInput: v => CURRENT_ONB.bienParkingNum = v }]
+  }));
+  g2.appendChild(ocheckboxGroup('Extérieurs', ['Balcon', 'Terrasse', 'Jardin', 'Aucun'], CURRENT_ONB.bienExterieurs));
+  g2.appendChild(ocheckboxDetail('Cave / Local vélos', CURRENT_ONB.bienCave, v => CURRENT_ONB.bienCave = v, {
+    details: [{ value: CURRENT_ONB.bienCaveNum, placeholder: 'N°', onInput: v => CURRENT_ONB.bienCaveNum = v }]
+  }));
+  content.appendChild(obox('Extérieurs & annexes', g2));
+
+  const g3 = el('div', { class: 'form-grid' });
+  const monoCoproWrap = el('div', { class: 'field' });
+  monoCoproWrap.appendChild(el('label', { text: 'Monopropriété ou copropriété ?' }));
+  const monoCoproSelect = el('select');
+  const emptyOpt = el('option', { text: '—' }); emptyOpt.value = ''; monoCoproSelect.appendChild(emptyOpt);
+  ['Monopropriété', 'Copropriété'].forEach(opt => {
+    const o = el('option', { text: opt }); o.value = opt;
+    if (CURRENT_ONB.bienMonoCopro === opt) o.selected = true;
+    monoCoproSelect.appendChild(o);
+  });
+  monoCoproSelect.addEventListener('change', () => {
+    CURRENT_ONB.bienMonoCopro = monoCoproSelect.value;
+    markDirtyOnb();
+    renderOnbEditor('bien');
+  });
+  monoCoproWrap.appendChild(monoCoproSelect);
+  g3.appendChild(monoCoproWrap);
+
+  if (CURRENT_ONB.bienMonoCopro === 'Copropriété') {
+    g3.appendChild(oselect('LCD autorisée par le règlement ?', CURRENT_ONB.bienLCDAutorisee, ['Oui', 'Non', 'À vérifier'], v => CURRENT_ONB.bienLCDAutorisee = v));
+    g3.appendChild(ofield('Nom du syndic', CURRENT_ONB.bienSyndicNom, v => CURRENT_ONB.bienSyndicNom = v));
+    g3.appendChild(ofield('Contact syndic', CURRENT_ONB.bienSyndicContact, v => CURRENT_ONB.bienSyndicContact = v));
+    g3.appendChild(ofield('Règles spécifiques copropriété', CURRENT_ONB.bienReglesCopro, v => CURRENT_ONB.bienReglesCopro = v, { wide: true, textarea: true }));
+  }
+  content.appendChild(obox('Copropriété & règlement', g3));
+
+  const g4 = el('div', { class: 'form-grid' });
+  g4.appendChild(ofield('Assurance habitation (société + n° de contrat)', CURRENT_ONB.bienAssuranceHabitation, v => CURRENT_ONB.bienAssuranceHabitation = v, { wide: true }));
+  content.appendChild(obox('Assurance', g4));
+}
+
+function buildOnbClesInventaire() {
+  const box = el('div', { class: 'box' });
+  box.appendChild(el('h3', { class: 'box-title', text: 'Clés remises' }));
+  const list = el('div', { class: 'cles-list' });
+  box.appendChild(list);
+
+  const render = () => {
+    list.innerHTML = '';
+    CURRENT_ONB.clesInventaire.forEach((c, i) => {
+      const row = el('div', { class: 'cle-row' });
+      const inputsRow = el('div', { class: 'cle-row-inputs' });
+      const nb = el('input', { attrs: { type: 'text', placeholder: 'Nb' } }); nb.value = c.nombre;
+      nb.addEventListener('input', () => { c.nombre = nb.value; markDirtyOnb(); });
+      const num = el('input', { attrs: { type: 'text', placeholder: 'N° (optionnel)' } }); num.value = c.numero;
+      num.addEventListener('input', () => { c.numero = num.value; markDirtyOnb(); });
+      const obs = el('input', { attrs: { type: 'text', placeholder: 'Ex : Porte d\'entrée' } }); obs.value = c.obs;
+      obs.addEventListener('input', () => { c.obs = obs.value; markDirtyOnb(); });
+      const del = el('button', {
+        class: 'btn-icon', text: '✕',
+        on: { click: () => { CURRENT_ONB.clesInventaire.splice(i, 1); markDirtyOnb(); render(); } }
+      });
+      inputsRow.appendChild(nb); inputsRow.appendChild(num); inputsRow.appendChild(obs); inputsRow.appendChild(del);
+      row.appendChild(inputsRow);
+      list.appendChild(row);
+    });
+  };
+  render();
+
+  box.appendChild(el('button', {
+    class: 'btn btn-outline btn-sm', text: '+ Ajouter une clé',
+    on: { click: () => { CURRENT_ONB.clesInventaire.push({ nombre: '', numero: '', obs: '' }); markDirtyOnb(); render(); } }
+  }));
+  box.appendChild(el('div', { class: 'field-hint', text: 'Une seule photo, regroupant l\'ensemble des clés remises.' }));
+  box.appendChild(buildSinglePhotoWidget(() => CURRENT_ONB.clesPhoto, v => CURRENT_ONB.clesPhoto = v, () => markDirtyOnb()));
+  return box;
+}
+
+function buildOnbAccesTab(content) {
+  const g = el('div', { class: 'form-grid' });
+  g.appendChild(ocheckboxGroup('Mode d\'accès', ['Clé physique', 'Boîte à clés', 'Serrure connectée', 'Digicode', 'Autre'], CURRENT_ONB.accesModes));
+  g.appendChild(ofield('Marque / modèle serrure connectée (AG LOC)', CURRENT_ONB.accesMarqueSerrure, v => CURRENT_ONB.accesMarqueSerrure = v));
+  g.appendChild(ofield('Code boîte à clés', CURRENT_ONB.accesCodeBoite, v => CURRENT_ONB.accesCodeBoite = v));
+  g.appendChild(ofield('Emplacement boîte à clés', CURRENT_ONB.accesEmplacementBoite, v => CURRENT_ONB.accesEmplacementBoite = v));
+  g.appendChild(ofield('Code serrure / digicode principal', CURRENT_ONB.accesCodeDigicode, v => CURRENT_ONB.accesCodeDigicode = v));
+  g.appendChild(ofield('Code portail / portillon', CURRENT_ONB.accesCodePortail, v => CURRENT_ONB.accesCodePortail = v));
+  g.appendChild(ofield('Code immeuble / interphone', CURRENT_ONB.accesCodeInterphone, v => CURRENT_ONB.accesCodeInterphone = v));
+  g.appendChild(ocheckboxDetail('Badge / télécommande garage', CURRENT_ONB.accesBadgeGarage, v => CURRENT_ONB.accesBadgeGarage = v, {
+    details: [{ value: CURRENT_ONB.accesBadgeGarageNb, placeholder: 'Nombre', onInput: v => CURRENT_ONB.accesBadgeGarageNb = v }]
+  }));
+  content.appendChild(obox('Système d\'accès', g));
+
+  content.appendChild(buildOnbClesInventaire());
+
+  const g3 = el('div', { class: 'form-grid' });
+  g3.appendChild(ofield('Heure de check-in (standard)', CURRENT_ONB.checkinHeure, v => CURRENT_ONB.checkinHeure = v));
+  g3.appendChild(oselect('Check-in anticipé possible ?', CURRENT_ONB.checkinAnticipe, ['Oui', 'Non', 'Sur demande'], v => CURRENT_ONB.checkinAnticipe = v));
+  g3.appendChild(ofield('Heure min check-in anticipé', CURRENT_ONB.checkinAnticipeHeure, v => CURRENT_ONB.checkinAnticipeHeure = v));
+  g3.appendChild(ofield('Heure de check-out (standard)', CURRENT_ONB.checkoutHeure, v => CURRENT_ONB.checkoutHeure = v));
+  g3.appendChild(oselect('Check-out tardif possible ?', CURRENT_ONB.checkoutTardif, ['Oui', 'Non', 'Sur demande'], v => CURRENT_ONB.checkoutTardif = v));
+  g3.appendChild(ofield('Heure max check-out tardif', CURRENT_ONB.checkoutTardifHeure, v => CURRENT_ONB.checkoutTardifHeure = v));
+  g3.appendChild(oselect('Mode de check-in', CURRENT_ONB.checkinMode, ['Accueil physique', 'Boîte à clés', 'Serrure connectée AG LOC', 'Concierge immeuble'], v => CURRENT_ONB.checkinMode = v));
+  g3.appendChild(ofield('Instructions spécifiques accès', CURRENT_ONB.accesInstructions, v => CURRENT_ONB.accesInstructions = v, { wide: true, textarea: true }));
+  content.appendChild(obox('Check-in / Check-out', g3));
+}
+
+function buildOnbElectromenagerBox() {
+  if (!CURRENT_ONB.electromenager) CURRENT_ONB.electromenager = [];
+  const existingNames = new Set(CURRENT_ONB.electromenager.map(item => item.nom));
+  ELECTROMENAGER_LISTE.forEach(nom => {
+    if (!existingNames.has(nom)) CURRENT_ONB.electromenager.push({ nom, present: false, marque: '', photo: null });
+  });
+  const box = el('div', { class: 'box' });
+  box.appendChild(el('h3', { class: 'box-title', text: 'Équipements & mobilier' }));
+  box.appendChild(el('div', { class: 'field-hint', text: 'Cochez les éléments présents, ajoutez des notes et une photo de chacun.' }));
+
+  const list = el('div', { class: 'onb-electro-list' });
+
+  const renderItem = (item) => {
+    const row = el('div', { class: 'onb-electro-row' });
+    const top = el('div', { class: 'onb-electro-top' });
+    const lab = el('label', { class: 'check-option' });
+    const cb = el('input', { attrs: { type: 'checkbox' } });
+    cb.checked = !!item.present;
+    lab.appendChild(cb); lab.appendChild(el('span', { text: item.nom }));
+    top.appendChild(lab);
+    const marque = el('input', { class: 'onb-electro-marque', attrs: { type: 'text', placeholder: 'Notes' } });
+    marque.value = item.marque || '';
+    marque.style.display = item.present ? 'block' : 'none';
+    marque.addEventListener('input', () => { item.marque = marque.value; markDirtyOnb(); });
+    top.appendChild(marque);
+    row.appendChild(top);
+
+    const photoWrap = el('div', { class: 'onb-electro-photo' });
+    photoWrap.style.display = item.present ? 'block' : 'none';
+    photoWrap.appendChild(buildSinglePhotoWidget(() => item.photo, v => item.photo = v, () => markDirtyOnb()));
+    row.appendChild(photoWrap);
+
+    cb.addEventListener('change', () => {
+      item.present = cb.checked;
+      markDirtyOnb();
+      marque.style.display = cb.checked ? 'block' : 'none';
+      photoWrap.style.display = cb.checked ? 'block' : 'none';
+    });
+    return row;
+  };
+
+  CURRENT_ONB.electromenager.forEach(item => list.appendChild(renderItem(item)));
+  box.appendChild(list);
+
+  const addRow = el('div', { class: 'add-room-row' });
+  const addInput = el('input', { attrs: { type: 'text', placeholder: 'Autre équipement (ex : Yaourtière)' } });
+  addRow.appendChild(addInput);
+  addRow.appendChild(el('button', {
+    class: 'btn btn-outline btn-sm', text: '+ Ajouter',
+    on: {
+      click: () => {
+        if (!addInput.value.trim()) return;
+        const item = { nom: addInput.value.trim(), present: true, marque: '', photo: null };
+        CURRENT_ONB.electromenager.push(item);
+        markDirtyOnb();
+        list.appendChild(renderItem(item));
+        addInput.value = '';
+      }
+    }
+  }));
+  box.appendChild(addRow);
+  return box;
+}
+
+function buildOnbEquipTab(content) {
+  const g = el('div', { class: 'form-grid' });
+  g.appendChild(oselect('Type de chauffage', CURRENT_ONB.chauffageType, ['Électrique', 'Gaz', 'Fioul', 'Pompe à chaleur', 'Collectif'], v => CURRENT_ONB.chauffageType = v));
+  g.appendChild(ofield('Marque / modèle chaudière', CURRENT_ONB.chauffageMarque, v => CURRENT_ONB.chauffageMarque = v));
+  g.appendChild(ofield('Date dernier entretien chaudière', CURRENT_ONB.chauffageDateEntretien, v => CURRENT_ONB.chauffageDateEntretien = v, { type: 'date' }));
+  g.appendChild(oselect('Eau chaude', CURRENT_ONB.eauChaudeType, ['Ballon électrique', 'Chaudière', 'Collectif', 'Instantané'], v => CURRENT_ONB.eauChaudeType = v));
+  g.appendChild(ofield('Référence ballon d\'eau chaude', CURRENT_ONB.eauChaudeRef, v => CURRENT_ONB.eauChaudeRef = v));
+  content.appendChild(obox('Chauffage & eau chaude', g));
+
+  const g2 = el('div', { class: 'form-grid' });
+  g2.appendChild(ofield('Puissance abonnement électrique', CURRENT_ONB.elecPuissance, v => CURRENT_ONB.elecPuissance = v));
+  g2.appendChild(ofield('Emplacement tableau électrique', CURRENT_ONB.elecEmplacementTableau, v => CURRENT_ONB.elecEmplacementTableau = v));
+  g2.appendChild(ofield('Fournisseur électricité', CURRENT_ONB.elecFournisseur, v => CURRENT_ONB.elecFournisseur = v));
+  g2.appendChild(ofield('Numéro de compteur (PDL)', CURRENT_ONB.elecNumCompteur, v => CURRENT_ONB.elecNumCompteur = v));
+  g2.appendChild(ofield('Connexion internet / opérateur', CURRENT_ONB.internetOperateur, v => CURRENT_ONB.internetOperateur = v));
+  g2.appendChild(ofield('SSID WiFi (nom réseau)', CURRENT_ONB.wifiSSID, v => CURRENT_ONB.wifiSSID = v));
+  g2.appendChild(ofield('Mot de passe WiFi', CURRENT_ONB.wifiPassword, v => CURRENT_ONB.wifiPassword = v));
+  g2.appendChild(oselect('Type de connexion', CURRENT_ONB.internetType, ['Fibre', 'ADSL', '4G/5G box'], v => CURRENT_ONB.internetType = v));
+  content.appendChild(obox('Électricité & réseau', g2));
+
+  content.appendChild(buildOnbElectromenagerBox());
+
+  const g3b = el('div', { class: 'form-grid' });
+  g3b.appendChild(ocheckboxDetail('Télévision', CURRENT_ONB.tv, v => CURRENT_ONB.tv = v, { details: [{ value: CURRENT_ONB.tvTaille, placeholder: 'Taille (pouces)', onInput: v => CURRENT_ONB.tvTaille = v }] }));
+  g3b.appendChild(ofield('Abonnement TV (Netflix, Canal...)', CURRENT_ONB.tvAbonnement, v => CURRENT_ONB.tvAbonnement = v));
+  g3b.appendChild(ofield('Codes accès plateformes TV', CURRENT_ONB.tvCodes, v => CURRENT_ONB.tvCodes = v));
+  const tvBox = obox('Télévision', g3b);
+  tvBox.appendChild(buildSinglePhotoWidget(() => CURRENT_ONB.tvPhoto, v => CURRENT_ONB.tvPhoto = v, () => markDirtyOnb()));
+  content.appendChild(tvBox);
+
+  const g4 = el('div', { class: 'form-grid' });
+  g4.appendChild(ocheckboxDetail('DAAF (détecteur de fumée)', CURRENT_ONB.daaf, v => CURRENT_ONB.daaf = v, {
+    details: [
+      { value: CURRENT_ONB.daafNb, placeholder: 'Nombre', onInput: v => CURRENT_ONB.daafNb = v },
+      { value: CURRENT_ONB.daafDateVerif, placeholder: 'Dernière vérification', onInput: v => CURRENT_ONB.daafDateVerif = v },
+    ]
+  }));
+  g4.appendChild(ocheckboxDetail('Détecteur CO', CURRENT_ONB.detecteurCO, v => CURRENT_ONB.detecteurCO = v, {}));
+  g4.appendChild(ocheckboxDetail('Extincteur', CURRENT_ONB.extincteur, v => CURRENT_ONB.extincteur = v, {
+    details: [{ value: CURRENT_ONB.extincteurDate, placeholder: 'Date contrôle', onInput: v => CURRENT_ONB.extincteurDate = v }]
+  }));
+  g4.appendChild(ocheckboxDetail('Alarme', CURRENT_ONB.alarme, v => CURRENT_ONB.alarme = v, {
+    details: [
+      { value: CURRENT_ONB.alarmeCode, placeholder: 'Code', onInput: v => CURRENT_ONB.alarmeCode = v },
+      { value: CURRENT_ONB.alarmeSociete, placeholder: 'Société', onInput: v => CURRENT_ONB.alarmeSociete = v },
+    ]
+  }));
+  g4.appendChild(ocheckboxDetail('Caméras extérieures', CURRENT_ONB.camerasExt, v => CURRENT_ONB.camerasExt = v, {
+    details: [{ value: CURRENT_ONB.camerasEmplacement, placeholder: 'Emplacement', onInput: v => CURRENT_ONB.camerasEmplacement = v }]
+  }));
+  content.appendChild(obox('Sécurité', g4));
+}
+
+function buildOnbPlateformesTab(content) {
+  const box = el('div', { class: 'box' });
+  box.appendChild(el('h3', { class: 'box-title', text: 'Plateformes de diffusion' }));
+  box.appendChild(oMiniTable(['Plateforme', 'URL / ID', 'Accès / Login', 'Statut'], CURRENT_ONB.plateformes, (p) => {
+    const row = el('div', { class: 'onb-table-row' });
+    row.appendChild(el('div', { class: 'onb-table-cell onb-table-label', text: p.nom }));
+    const url = el('input', { attrs: { type: 'text' } }); url.value = p.url;
+    url.addEventListener('input', () => { p.url = url.value; markDirtyOnb(); });
+    row.appendChild(el('div', { class: 'onb-table-cell' }, )).appendChild(url);
+    const acces = el('input', { attrs: { type: 'text' } }); acces.value = p.acces;
+    acces.addEventListener('input', () => { p.acces = acces.value; markDirtyOnb(); });
+    row.appendChild(el('div', { class: 'onb-table-cell' })).appendChild(acces);
+    const statutSel = el('select');
+    ['Actif', 'Inactif'].forEach(s => { const o = el('option', { text: s }); o.value = s; if (p.statut === s) o.selected = true; statutSel.appendChild(o); });
+    statutSel.addEventListener('change', () => { p.statut = statutSel.value; markDirtyOnb(); });
+    row.appendChild(el('div', { class: 'onb-table-cell' })).appendChild(statutSel);
+    return row;
+  }));
+  content.appendChild(box);
+
+  const g = el('div', { class: 'form-grid' });
+  g.appendChild(ofield('Prix nuit — Basse saison (€)', CURRENT_ONB.prixBasse, v => CURRENT_ONB.prixBasse = v));
+  g.appendChild(ofield('Prix nuit — Moyenne saison (€)', CURRENT_ONB.prixMoyenne, v => CURRENT_ONB.prixMoyenne = v));
+  g.appendChild(ofield('Prix nuit — Haute saison (€)', CURRENT_ONB.prixHaute, v => CURRENT_ONB.prixHaute = v));
+  g.appendChild(ofield('Prix nuit minimum accepté (€)', CURRENT_ONB.prixMin, v => CURRENT_ONB.prixMin = v));
+  g.appendChild(ofield('Séjour minimum (nuits)', CURRENT_ONB.sejourMin, v => CURRENT_ONB.sejourMin = v));
+  g.appendChild(ocheckboxDetail('Frais de ménage inclus dans le prix', CURRENT_ONB.fraisMenageInclus, v => CURRENT_ONB.fraisMenageInclus = v, {
+    details: [{ value: CURRENT_ONB.fraisMenage, placeholder: 'Montant (€) si non inclus', onInput: v => CURRENT_ONB.fraisMenage = v }]
+  }));
+  g.appendChild(ocheckboxDetail('Caution voyageur non demandée', CURRENT_ONB.cautionNonDemandee, v => CURRENT_ONB.cautionNonDemandee = v, {
+    details: [{ value: CURRENT_ONB.caution, placeholder: 'Montant (€) si demandée', onInput: v => CURRENT_ONB.caution = v }]
+  }));
+  g.appendChild(oselect('Channel manager', CURRENT_ONB.channelManager, ['Hostaway'], v => CURRENT_ONB.channelManager = v));
+  g.appendChild(ofield('Accès channel manager (login)', CURRENT_ONB.channelManagerAcces, v => CURRENT_ONB.channelManagerAcces = v));
+  g.appendChild(ofield('Règles tarifaires spéciales', CURRENT_ONB.reglesTarifairesSpeciales, v => CURRENT_ONB.reglesTarifairesSpeciales = v, { wide: true, textarea: true }));
+  content.appendChild(obox('Tarification & Channel Manager', g));
+}
+
+function buildOnbReglesTab(content) {
+  const g = el('div', { class: 'form-grid' });
+  g.appendChild(oselect('Animaux acceptés ?', CURRENT_ONB.animaux, ['Oui', 'Non', 'Oui avec supplément'], v => CURRENT_ONB.animaux = v));
+  g.appendChild(ofield('Supplément animaux (€)', CURRENT_ONB.animauxSupplement, v => CURRENT_ONB.animauxSupplement = v));
+  g.appendChild(oselect('Fumeurs acceptés ?', CURRENT_ONB.fumeurs, ['Oui', 'Non'], v => CURRENT_ONB.fumeurs = v));
+  g.appendChild(ofield('Zones fumeurs autorisées', CURRENT_ONB.fumeursZones, v => CURRENT_ONB.fumeursZones = v));
+  g.appendChild(oselect('Fêtes / événements autorisés ?', CURRENT_ONB.fetes, ['Oui', 'Non', 'Sur demande uniquement'], v => CURRENT_ONB.fetes = v));
+  g.appendChild(ofield('Nombre max de voyageurs', CURRENT_ONB.nbMaxVoyageurs, v => CURRENT_ONB.nbMaxVoyageurs = v));
+  g.appendChild(oselect('Enfants acceptés ?', CURRENT_ONB.enfants, ['Oui', 'Non', 'Oui, lit bébé disponible'], v => CURRENT_ONB.enfants = v));
+  g.appendChild(ofield('Heure de silence (règle copro)', CURRENT_ONB.heureSilence, v => CURRENT_ONB.heureSilence = v));
+  g.appendChild(ofield('Règles de stationnement', CURRENT_ONB.reglesStationnement, v => CURRENT_ONB.reglesStationnement = v));
+  g.appendChild(ofield('Poubelles / tri sélectif (jours)', CURRENT_ONB.poubellesJours, v => CURRENT_ONB.poubellesJours = v));
+  g.appendChild(ofield('Règles spécifiques propriétaire', CURRENT_ONB.reglesSpecifiques, v => CURRENT_ONB.reglesSpecifiques = v, { wide: true, textarea: true }));
+  g.appendChild(ofield('Pièces / zones interdites', CURRENT_ONB.piecesInterdites, v => CURRENT_ONB.piecesInterdites = v, { wide: true, textarea: true }));
+  g.appendChild(ofield('Objets personnels à ne pas toucher', CURRENT_ONB.objetsPersonnels, v => CURRENT_ONB.objetsPersonnels = v, { wide: true, textarea: true }));
+  g.appendChild(ofield('Instructions pour le jardin / extérieurs', CURRENT_ONB.instructionsJardin, v => CURRENT_ONB.instructionsJardin = v, { wide: true, textarea: true }));
+  content.appendChild(obox('Règles & consignes propriétaire', g));
+}
+
+function buildOnbConsoTab(content) {
+  const box = el('div', { class: 'box' });
+  box.appendChild(el('h3', { class: 'box-title', text: 'Consommables & dotation de départ' }));
+  box.appendChild(el('div', {
+    class: 'field-hint',
+    text: 'Indiquer le responsable d\'approvisionnement. Les distributeurs AG LOC fournissent gel douche, shampoing, liquide vaisselle et savon mains.'
+  }));
+  box.appendChild(oMiniTable(['Article', 'Responsable', 'Notes'], CURRENT_ONB.consommables, (c) => {
+    const row = el('div', { class: 'onb-table-row' });
+    row.appendChild(el('div', { class: 'onb-table-cell onb-table-label', text: c.article }));
+    const respSel = el('select');
+    ['', 'Proprio', 'AG LOC'].forEach(s => { const o = el('option', { text: s || '—' }); o.value = s; if (c.responsable === s) o.selected = true; respSel.appendChild(o); });
+    respSel.addEventListener('change', () => { c.responsable = respSel.value; markDirtyOnb(); });
+    row.appendChild(el('div', { class: 'onb-table-cell' })).appendChild(respSel);
+    const notes = el('input', { attrs: { type: 'text' } }); notes.value = c.notes;
+    notes.addEventListener('input', () => { c.notes = notes.value; markDirtyOnb(); });
+    row.appendChild(el('div', { class: 'onb-table-cell' })).appendChild(notes);
+    return row;
+  }));
+  content.appendChild(box);
+}
+
+function buildOnbChecklistTab(content) {
+  const total = CURRENT_ONB.checklist.length;
+  const done = CURRENT_ONB.checklist.filter(c => c.checked).length;
+  const box = el('div', { class: 'box' });
+  box.appendChild(el('h3', { class: 'box-title', text: 'Checklist de prise en charge (' + done + ' / ' + total + ')' }));
+  box.appendChild(el('div', {
+    class: 'field-hint',
+    text: 'Toutes les cases doivent être cochées avant le premier séjour voyageur. Cette checklist est le document de référence pour valider l\'onboarding.'
+  }));
+  const list = el('div', { class: 'onb-checklist' });
+  CURRENT_ONB.checklist.forEach(item => {
+    const lab = el('label', { class: 'check-option onb-checklist-item' });
+    const cb = el('input', { attrs: { type: 'checkbox' } });
+    cb.checked = !!item.checked;
+    cb.addEventListener('change', () => {
+      item.checked = cb.checked;
+      markDirtyOnb();
+      box.querySelector('.box-title').textContent = 'Checklist de prise en charge (' +
+        CURRENT_ONB.checklist.filter(c => c.checked).length + ' / ' + total + ')';
+    });
+    lab.appendChild(cb); lab.appendChild(el('span', { text: item.label }));
+    list.appendChild(lab);
+  });
+  box.appendChild(list);
+  content.appendChild(box);
+}
+
+function buildOnbNotesTab(content) {
+  const g = el('div', { class: 'form-grid' });
+  g.appendChild(ofield('Points d\'attention, fragilités, historique incidents, spécificités techniques', CURRENT_ONB.notes, v => CURRENT_ONB.notes = v, { wide: true, textarea: true, rows: 5 }));
+  content.appendChild(obox('Notes & spécificités du bien', g));
+
+  const g2 = el('div', { class: 'form-grid' });
+  g2.appendChild(ofield('Nom du propriétaire (validation)', CURRENT_ONB.signatureProprioNom, v => CURRENT_ONB.signatureProprioNom = v));
+  g2.appendChild(ofield('Nom du responsable AG Location', CURRENT_ONB.signatureResponsableNom, v => CURRENT_ONB.signatureResponsableNom = v));
+  content.appendChild(obox('Validation & signatures', g2));
+
+  const sigBox = el('div', { class: 'box' });
+  const sigGrid = el('div', { class: 'sig-grid' });
+  sigGrid.appendChild(buildSignaturePadOnb('proprietaire', 'Propriétaire'));
+  sigGrid.appendChild(buildSignaturePadOnb('responsable', 'Responsable AG Location'));
+  sigBox.appendChild(sigGrid);
+  content.appendChild(sigBox);
+}
+
+function buildSignaturePadOnb(key, label) {
+  const box = el('div', { class: 'sig-box' });
+  box.appendChild(el('div', { class: 'sig-label', text: label }));
+  const canvas = el('canvas', { class: 'sig-canvas', attrs: { width: '320', height: '150' } });
+  box.appendChild(canvas);
+  const ctx = canvas.getContext('2d');
+  ctx.strokeStyle = '#131e30'; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+
+  let drawing = false;
+  const existing = CURRENT_ONB.signatures[key];
+  if (existing) {
+    const img = new Image();
+    img.onload = () => ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    img.src = existing;
+  }
+  function pos(e) {
+    const r = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / r.width, scaleY = canvas.height / r.height;
+    const p = e.touches ? e.touches[0] : e;
+    return { x: (p.clientX - r.left) * scaleX, y: (p.clientY - r.top) * scaleY };
+  }
+  function start(e) { drawing = true; const p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); e.preventDefault(); }
+  function move(e) { if (!drawing) return; const p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); e.preventDefault(); }
+  function end() {
+    if (!drawing) return;
+    drawing = false;
+    CURRENT_ONB.signatures[key] = canvas.toDataURL('image/png');
+    markDirtyOnb();
+  }
+  canvas.addEventListener('mousedown', start);
+  canvas.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', end);
+  canvas.addEventListener('touchstart', start, { passive: false });
+  canvas.addEventListener('touchmove', move, { passive: false });
+  canvas.addEventListener('touchend', end);
+
+  box.appendChild(el('button', {
+    class: 'btn btn-ghost btn-sm', text: 'Effacer',
+    on: { click: () => { ctx.clearRect(0, 0, canvas.width, canvas.height); CURRENT_ONB.signatures[key] = null; markDirtyOnb(); } }
+  }));
+  return box;
+}
+
+const TABS_ONB = [
+  { key: 'proprio', label: 'Propriétaire' },
+  { key: 'bien', label: 'Bien' },
+  { key: 'acces', label: 'Accès' },
+  { key: 'equip', label: 'Équipements' },
+  { key: 'plateformes', label: 'Plateformes' },
+  { key: 'regles', label: 'Règles' },
+  { key: 'conso', label: 'Consommables' },
+  { key: 'checklist', label: 'Checklist' },
+  { key: 'notes', label: 'Notes & validation' },
+];
+
+async function renderOnbEditor(activeTab) {
+  App.innerHTML = '';
+  const header = el('div', { class: 'topbar' });
+  header.appendChild(el('button', { class: 'btn-back', text: '← Accueil', on: { click: renderOnbHome } }));
+  header.appendChild(brandLogo(28));
+  header.appendChild(el('div', { class: 'brand brand-compact', html: '<span class="brand-a">AG</span>LOC' }));
+  const titleBox = el('div', { class: 'insp-header-title' });
+  titleBox.appendChild(el('span', { class: 'tag tag-onb', text: CURRENT_ONB.statut || 'En cours' }));
+  titleBox.appendChild(el('span', { text: CURRENT_ONB.proprioNom || 'Nouveau bien' }));
+  header.appendChild(titleBox);
+  SAVE_STATUS = el('div', { class: 'save-status', text: 'Enregistré ✓' });
+  header.appendChild(SAVE_STATUS);
+  App.appendChild(header);
+
+  const tabnav = el('div', { class: 'tabnav' });
+  TABS_ONB.forEach(t => {
+    tabnav.appendChild(el('button', {
+      class: 'tab-btn' + (t.key === activeTab ? ' active' : ''),
+      text: t.label,
+      on: { click: () => renderOnbEditor(t.key) }
+    }));
+  });
+  App.appendChild(tabnav);
+
+  const content = el('div', { class: 'page' });
+  App.appendChild(content);
+
+  const fnMap = {
+    proprio: buildOnbProprioTab, bien: buildOnbBienTab, acces: buildOnbAccesTab,
+    equip: buildOnbEquipTab, plateformes: buildOnbPlateformesTab, regles: buildOnbReglesTab,
+    conso: buildOnbConsoTab, checklist: buildOnbChecklistTab,
+    notes: buildOnbNotesTab,
+  };
+  (fnMap[activeTab] || buildOnbProprioTab)(content);
 }
 
 /* ---- démarrage ---- */
