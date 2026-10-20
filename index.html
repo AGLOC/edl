@@ -460,17 +460,9 @@ const InterLoc = (() => {
     const p = c && c.type === 'agence' && l && l.proprioId ? await lire('proprietaires', l.proprioId) : null;
     const insp = newInspection(type);
     insp.dossierNumero = await nextDossierNumber();
-    insp.proprietaire = c && c.type !== 'agence' ? (c.nom || '') : (p ? p.nom : '');
-    if (c && c.type === 'agence') {
-      const ms = await Store.getMandataires();
-      let m = ms.find(x => norm(x.agence) === norm(c.nom) || (c.email && norm(x.email) === norm(c.email)));
-      if (!m) {
-        const ct = c.contact && typeof c.contact === 'object' ? [c.contact.prenom, c.contact.nom].filter(Boolean).join(' ') : (c.contact || '');
-        m = { id: uid(), nom: ct, agence: c.nom || '', telephone: c.tel || '', email: c.email || '', adresse: typeof c.adresse === 'string' ? [c.adresse, [c.cp, c.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ') : '' };
-        ms.push(m); await Store.saveMandataires(ms); MANDATAIRES_CACHE = ms;
-      }
-      insp.mandataire = { id: m.id, nom: m.nom, agence: m.agence, telephone: m.telephone, email: m.email, adresse: m.adresse };
-    }
+    if (c) appliquerClient(insp, { id: c.id, type: c.type === 'agence' ? 'agence' : 'proprietaire', nom: c.nom || '', contact: nomContact(c), telephone: c.tel || '', email: c.email || '',
+      adresse: typeof c.adresse === 'string' ? [c.adresse, [c.cp, c.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ') : '' });
+    if (p) { insp.proprietaire = p.nom || ''; insp.proprioInterlocId = p.id; }
     insp.bienAdresse = [o.adresse, o.etagePorte, [o.cp, o.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ');
     insp.bienMeuble = /meubl/i.test(o.meuble || (l && l.meuble) || '');
     const typeLot = (l && l.type) || '';
@@ -592,6 +584,7 @@ const InterLoc = (() => {
         .then(n => { try { localStorage.setItem('il-edl-migre-v1', new Date().toISOString()); } catch (x) {} window.storage.majEtat(); if (!CURRENT && n) renderHome(); })
         .catch(x => { sync.textContent = 'Envoi interrompu (' + (x.message || x) + ') : il reprendra à la prochaine ouverture.'; sync.className = 'il-sync attente'; });
     } else if (window.storage.vider) window.storage.vider();
+    rafraichirAnnuaire().catch(() => {});
     head.appendChild(el('div', { class: 'il-user', children: [document.createTextNode(e.email), el('button', { text: 'Actualiser', on: { click: () => renderSection(box, index) } }), el('button', { text: 'Se déconnecter', on: { click: async () => { await deconnexion(); renderSection(box, index); } } })] }));
     let list;
     try { list = await commandes(); }
@@ -625,6 +618,40 @@ const InterLoc = (() => {
       grid.appendChild(card);
     });
     body.appendChild(grid);
+  }
+
+  /* --- Annuaire : clients Inter'Loc (agences, particuliers) et propriétaires des agences ---
+     Gardé sur l'appareil pour rester disponible sans réseau ; rafraîchi à chaque ouverture de l'accueil. */
+  const ANN_KEY = 'il-annuaire';
+  let annuaire = (() => { try { return JSON.parse(localStorage.getItem(ANN_KEY) || 'null') || { clients: [], proprios: [] }; } catch (e) { return { clients: [], proprios: [] }; } })();
+  const nomContact = c => c.contact && typeof c.contact === 'object' ? [c.contact.prenom, c.contact.nom].filter(Boolean).join(' ') : (c.contact || '');
+  async function rafraichirAnnuaire() {
+    const k = await distant(); if (!k) return annuaire;
+    const f = k.f, auj = new Date().toISOString().slice(0, 10);
+    const [cs, ps] = await Promise.all([f.getDocs(f.collection(k.db, 'clients')), f.getDocs(f.collection(k.db, 'proprietaires'))]);
+    const clients = [], proprios = [];
+    cs.forEach(d => { const c = d.data();
+      if (c.archive || (c.resiliation && c.resiliation.finLe && c.resiliation.finLe <= auj) || (c.inscription && c.inscription.statut === 'rejete')) return;
+      clients.push({ id: d.id, type: c.type === 'agence' ? 'agence' : 'proprietaire', nom: c.nom || '', contact: nomContact(c), telephone: c.tel || '', email: c.email || '',
+        adresse: typeof c.adresse === 'string' ? [c.adresse, [c.cp, c.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ') : '' }); });
+    ps.forEach(d => { const x = d.data(); if (x.archive) return; proprios.push({ id: d.id, clientId: x.clientId, nom: x.nom || '', telephone: x.tel || '', email: x.email || '' }); });
+    clients.sort((a, b) => a.nom.localeCompare(b.nom, 'fr')); proprios.sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
+    annuaire = { clients, proprios, le: new Date().toISOString() };
+    try { localStorage.setItem(ANN_KEY, JSON.stringify(annuaire)); } catch (e) {}
+    return annuaire;
+  }
+  const clientsIL = () => annuaire.clients || [];
+  const proprietairesIL = clientId => (annuaire.proprios || []).filter(p => p.clientId === clientId);
+  /* Choix d'un client Inter'Loc dans un état des lieux */
+  function appliquerClient(insp, c) {
+    insp.clientInterloc = c ? { id: c.id, type: c.type, nom: c.nom } : null;
+    if (!c) return;
+    if (c.type === 'agence') {
+      insp.mandataire = { id: 'il:' + c.id, nom: c.contact, agence: c.nom, telephone: c.telephone, email: c.email, adresse: c.adresse };
+      if (insp.proprioInterlocId && !proprietairesIL(c.id).some(p => p.id === insp.proprioInterlocId)) { insp.proprioInterlocId = null; insp.proprietaire = ''; }
+    } else {
+      insp.mandataire = null; insp.proprioInterlocId = null; insp.proprietaire = c.nom;
+    }
   }
 
   /* --- Dossiers de l'appli enregistrés dans Inter'Loc (collection « edlApp », réservée aux administrateurs) --- */
@@ -711,7 +738,7 @@ const InterLoc = (() => {
     return n;
   }
 
-  return { renderSection, proposerEnvoi, creerDepuis, envoyer, etat, kv, fusion, migrer, distant };
+  return { renderSection, proposerEnvoi, creerDepuis, envoyer, etat, kv, fusion, migrer, distant, rafraichirAnnuaire, clientsIL, proprietairesIL, appliquerClient };
 })();
 </script>
 <script>
@@ -1685,6 +1712,8 @@ async function duplicateInspection(id) {
   copy.mandataire = src.mandataire ? { ...src.mandataire } : null;
   copy.technicien = src.technicien;
   copy.proprietaire = src.proprietaire;
+  copy.clientInterloc = src.clientInterloc ? { ...src.clientInterloc } : null;
+  copy.proprioInterlocId = src.proprioInterlocId || null;
   copy.dateEdl = new Date().toISOString().slice(0, 10);
   copy.bienType = src.bienType;
   copy.bienMeuble = src.bienMeuble;
@@ -1933,21 +1962,43 @@ function openTechnicienQuickAdd(onCreated) {
 
 function buildMandataireSelector() {
   const wrap = el('div', { class: 'field field-wide' });
-  wrap.appendChild(el('label', { text: 'Mandataire / agence' }));
+  wrap.appendChild(el('label', { text: 'Client / mandataire / agence' }));
   const select = el('select');
-  const emptyOpt = el('option', { text: '— Sélectionner un mandataire —' }); emptyOpt.value = '';
+  const emptyOpt = el('option', { text: '— Sélectionner un client ou un mandataire —' }); emptyOpt.value = '';
   select.appendChild(emptyOpt);
-  MANDATAIRES_CACHE.forEach(m => {
+  const valeur = () => CURRENT.clientInterloc ? 'il:' + CURRENT.clientInterloc.id : (CURRENT.mandataire ? CURRENT.mandataire.id : '');
+  const clients = InterLoc.clientsIL();
+  [['agence', "Clients Inter'Loc · agences"], ['proprietaire', "Clients Inter'Loc · propriétaires particuliers"]].forEach(([t, lib]) => {
+    const l = clients.filter(c => c.type === t); if (!l.length) return;
+    const g = el('optgroup'); g.label = lib;
+    l.forEach(c => { const o = el('option', { text: c.nom + (c.contact && t === 'agence' ? ' — ' + c.contact : '') }); o.value = 'il:' + c.id; g.appendChild(o); });
+    select.appendChild(g);
+  });
+  if (CURRENT.clientInterloc && !clients.some(c => c.id === CURRENT.clientInterloc.id)) {
+    const o = el('option', { text: CURRENT.clientInterloc.nom + " (client Inter'Loc)" }); o.value = 'il:' + CURRENT.clientInterloc.id; select.appendChild(o);
+  }
+  const autres = MANDATAIRES_CACHE.filter(m => !String(m.id).startsWith('il:'));
+  const g2 = el('optgroup'); g2.label = "Autres mandataires / agences (non clients Inter'Loc)";
+  autres.forEach(m => {
     const o = el('option', { text: m.nom + (m.agence ? ' — ' + m.agence : '') });
     o.value = m.id;
-    if (CURRENT.mandataire && CURRENT.mandataire.id === m.id) o.selected = true;
-    select.appendChild(o);
+    g2.appendChild(o);
   });
-  const addOpt = el('option', { text: '+ Nouveau mandataire…' }); addOpt.value = '__new__';
-  select.appendChild(addOpt);
+  const addOpt = el('option', { text: '+ Nouveau mandataire / agence…' }); addOpt.value = '__new__';
+  g2.appendChild(addOpt);
+  select.appendChild(g2);
+  select.value = valeur();
+  if (!clients.length) wrap.appendChild(el('div', { class: 'field-hint', text: "Connectez-vous à Inter'Loc depuis l'accueil pour retrouver ici les clients Inter'Loc." }));
   select.addEventListener('change', () => {
+    if (select.value.startsWith('il:')) {
+      const c = InterLoc.clientsIL().find(x => 'il:' + x.id === select.value);
+      if (c) InterLoc.appliquerClient(CURRENT, c);
+      refreshDossierDisplay(); markDirty(); renderEditor('general');
+      return;
+    }
+    if (CURRENT.clientInterloc) { CURRENT.clientInterloc = null; CURRENT.proprioInterlocId = null; }
     if (select.value === '__new__') {
-      select.value = CURRENT.mandataire ? CURRENT.mandataire.id : '';
+      select.value = valeur();
       openMandataireQuickAdd(created => {
         CURRENT.mandataire = created;
         markDirty();
@@ -1968,6 +2019,38 @@ function buildMandataireSelector() {
     if (CURRENT.mandataire.adresse) info.appendChild(el('div', { text: '📍 ' + CURRENT.mandataire.adresse }));
     wrap.appendChild(info);
   }
+  return wrap;
+}
+
+/* Propriétaire : liste des propriétaires de l'agence cliente Inter'Loc, ou saisie libre */
+function buildProprietaireField() {
+  const ci = CURRENT.clientInterloc;
+  const proprios = ci && ci.type === 'agence' ? InterLoc.proprietairesIL(ci.id) : [];
+  if (!ci || ci.type !== 'agence' || (!proprios.length && !CURRENT.proprioInterlocId)) {
+    const f = field('Propriétaire', CURRENT.proprietaire, v => { CURRENT.proprietaire = v; CURRENT.proprioInterlocId = null; refreshDossierDisplay(); });
+    if (ci && ci.type === 'agence') f.appendChild(el('div', { class: 'field-hint', text: "Aucun propriétaire enregistré pour " + ci.nom + " dans Inter'Loc : saisissez-le." }));
+    return f;
+  }
+  const wrap = el('div', { class: 'field' });
+  wrap.appendChild(el('label', { text: 'Propriétaire (' + ci.nom + ')' }));
+  const select = el('select');
+  const vide = el('option', { text: '— Sélectionner un propriétaire —' }); vide.value = ''; select.appendChild(vide);
+  proprios.forEach(p => { const o = el('option', { text: p.nom }); o.value = p.id; select.appendChild(o); });
+  const autre = el('option', { text: "Autre propriétaire (non enregistré dans Inter'Loc)…" }); autre.value = '__autre__'; select.appendChild(autre);
+  const libre = !CURRENT.proprioInterlocId && !!CURRENT.proprietaire;
+  select.value = CURRENT.proprioInterlocId || (libre ? '__autre__' : '');
+  wrap.appendChild(select);
+  const input = el('input', { attrs: { type: 'text', placeholder: 'Nom du propriétaire' } });
+  input.value = libre ? CURRENT.proprietaire : '';
+  input.style.marginTop = '6px';
+  input.style.display = select.value === '__autre__' ? '' : 'none';
+  input.addEventListener('input', () => { CURRENT.proprietaire = input.value; CURRENT.proprioInterlocId = null; refreshDossierDisplay(); markDirty(); });
+  wrap.appendChild(input);
+  select.addEventListener('change', () => {
+    if (select.value === '__autre__') { CURRENT.proprioInterlocId = null; CURRENT.proprietaire = input.value; input.style.display = ''; input.focus(); }
+    else { const p = proprios.find(x => x.id === select.value); CURRENT.proprioInterlocId = p ? p.id : null; CURRENT.proprietaire = p ? p.nom : ''; input.style.display = 'none'; }
+    refreshDossierDisplay(); markDirty();
+  });
   return wrap;
 }
 
@@ -2159,8 +2242,7 @@ function buildGeneralTab(content) {
   grid.appendChild(buildDossierField());
   grid.appendChild(buildTechnicienSelector());
   grid.appendChild(buildMandataireSelector());
-  const propField = field('Propriétaire', CURRENT.proprietaire, v => { CURRENT.proprietaire = v; refreshDossierDisplay(); });
-  grid.appendChild(propField);
+  grid.appendChild(buildProprietaireField());
   grid.appendChild(field('Date', CURRENT.dateEdl, v => CURRENT.dateEdl = v, { type: 'date' }));
   content.appendChild(sectionBox('Informations générales', grid));
 
