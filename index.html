@@ -149,6 +149,32 @@ button, input, select, textarea { font-family: inherit; }
 .insp-card-date { font-size: 11.5px; color: #96a2b0; margin-bottom: 12px; }
 .insp-card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 
+
+/* ---------- Liaison Inter'Loc ---------- */
+.il-zone { margin-top: 22px; }
+.il-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; }
+.il-head .section-title { margin: 0; }
+.il-user { font-size: 12px; color: var(--subtle); }
+.il-user button { background: none; border: none; color: var(--blue); text-decoration: underline; cursor: pointer; font-size: 12px; padding: 0 0 0 6px; }
+.il-login { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: end; }
+@media (max-width: 620px) { .il-login { grid-template-columns: 1fr; } }
+.il-login input { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: 14px; }
+.il-login label { display: block; font-size: 12px; color: var(--subtle); margin-bottom: 4px; }
+.il-err { color: var(--red); font-size: 13px; margin-top: 8px; }
+.il-card { border-left: 4px solid var(--gold); }
+.il-card .il-info { font-size: 12.5px; color: var(--text); margin: 0 0 4px; line-height: 1.45; }
+.il-card .il-info b { font-weight: 600; }
+.il-card .il-info a { color: var(--blue); }
+.il-card .il-note { font-size: 12px; color: var(--subtle); background: var(--lightblue); border-radius: 6px; padding: 6px 8px; margin: 6px 0 10px; }
+.il-tag { background: var(--navy); }
+.il-badge { display: inline-block; margin-left: 6px; font-size: 10.5px; font-weight: 600; padding: 3px 8px; border-radius: 20px; background: var(--lightgold); color: var(--gold-dark); vertical-align: top; }
+.il-badge.ok { background: #e3f3e9; color: var(--green); }
+.il-overlay { position: fixed; inset: 0; background: rgba(19,30,48,.55); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 16px; }
+.il-dialog { background: #fff; border-radius: 12px; padding: 20px; max-width: 440px; width: 100%; box-shadow: 0 10px 40px rgba(0,0,0,.25); }
+.il-dialog h3 { margin: 0 0 8px; font-size: 16px; color: var(--navy); }
+.il-dialog p { font-size: 14px; color: var(--subtle); margin: 0 0 16px; line-height: 1.5; }
+.il-dialog .il-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+
 /* ---------- Boxes / sections ---------- */
 .box {
   background: #fff; border: 1px solid var(--border); border-radius: var(--radius);
@@ -355,6 +381,243 @@ button, input, select, textarea { font-family: inherit; }
   <div style="padding:60px 20px;text-align:center;color:#5a6a7a;font-family:sans-serif;">Chargement de l'application…</div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+/* ---------- Liaison avec Inter'Loc ----------
+   Les commandes d'états des lieux passées par les clients dans Inter'Loc apparaissent sur l'accueil.
+   « Créer l'EDL » prépare un état des lieux prérempli ; une fois le PDF généré, il peut être envoyé
+   à Inter'Loc : il est rangé dans la commande, qui passe en « Réalisé », et le client le reçoit par e-mail.
+   La connexion se fait avec un compte administrateur Inter'Loc, mémorisé sur l'appareil. */
+const InterLoc = (() => {
+  const CFG_URL = 'https://interloc.aglocation.fr/edl-config.json';
+  const SDK = 'https://www.gstatic.com/firebasejs/10.13.0/';
+  const ACTIFS = ['Commandé', 'Rendez-vous fixé'];
+  const MISSIONS = { entree: "Entrée", sortie: "Sortie", forfait: "Sortie + entrée", contre: "Contre-visite" };
+  let P = null;
+
+  function init() {
+    if (P) return P;
+    P = (async () => {
+      let cfg;
+      try {
+        const r = await fetch(CFG_URL, { cache: 'no-store' });
+        cfg = await r.json();
+      } catch (e) { throw new Error("Inter'Loc ne répond pas. Vérifiez la connexion internet."); }
+      if (!cfg || !cfg.apiKey) throw new Error("La configuration d'Inter'Loc est incomplète.");
+      const [a, au, f, s] = await Promise.all([
+        import(SDK + 'firebase-app.js'), import(SDK + 'firebase-auth.js'),
+        import(SDK + 'firebase-firestore.js'), import(SDK + 'firebase-storage.js')
+      ]);
+      const app = a.getApps().find(x => x.name === 'interloc') || a.initializeApp(cfg, 'interloc');
+      let auth;
+      try { auth = au.initializeAuth(app, { persistence: au.browserLocalPersistence }); } catch (e) { auth = au.getAuth(app); }
+      let db;
+      try { db = f.initializeFirestore(app, { experimentalAutoDetectLongPolling: true }); } catch (e) { db = f.getFirestore(app); }
+      const st = s.getStorage(app);
+      await new Promise(res => { const u = au.onAuthStateChanged(auth, () => { u(); res(); }); });
+      return { au, f, s, auth, db, st };
+    })();
+    P.catch(() => { P = null; });
+    return P;
+  }
+  async function etat() {
+    const k = await init();
+    const u = k.auth.currentUser;
+    if (!u) return { connecte: false };
+    const t = await u.getIdTokenResult();
+    return { connecte: true, email: u.email, admin: t.claims.role === 'admin' };
+  }
+  async function connexion(email, mdp) {
+    const k = await init();
+    try { await k.au.signInWithEmailAndPassword(k.auth, email, mdp); }
+    catch (e) { throw new Error(/invalid|wrong|not-found|credential/i.test(e.code || '') ? 'E-mail ou mot de passe incorrect.' : /too-many/i.test(e.code || '') ? 'Trop de tentatives : réessayez dans quelques minutes.' : "Connexion impossible : " + (e.code || e.message)); }
+    const e = await etat();
+    if (!e.admin) { await k.au.signOut(k.auth); throw new Error("Ce compte n'est pas un compte administrateur Inter'Loc."); }
+    return e;
+  }
+  async function deconnexion() { const k = await init(); await k.au.signOut(k.auth); }
+  async function lire(coll, id) {
+    if (!id) return null;
+    const k = await init();
+    const d = await k.f.getDoc(k.f.doc(k.db, coll, id));
+    return d.exists() ? Object.assign({ id: d.id }, d.data()) : null;
+  }
+  const quand = o => o.rdv || (o.mission === 'entree' ? o.dateEntree : o.finPreavis) || o.date || o.creeLe || '';
+  async function commandes() {
+    const k = await init(), f = k.f;
+    const snap = await f.getDocs(f.query(f.collection(k.db, 'edl'), f.where('statut', 'in', ACTIFS)));
+    const list = [];
+    snap.forEach(d => list.push(Object.assign({ id: d.id }, d.data())));
+    return list.filter(o => o.origine !== 'app').sort((x, y) => String(quand(x)).localeCompare(String(quand(y))));
+  }
+
+  /* --- Préremplissage d'un état des lieux à partir d'une commande --- */
+  const norm = v => String(v || '').trim().toLowerCase();
+  async function creerDepuis(o, type) {
+    const [c, l] = await Promise.all([lire('clients', o.clientId), lire('lots', o.lotId)]);
+    const p = c && c.type === 'agence' && l && l.proprioId ? await lire('proprietaires', l.proprioId) : null;
+    const insp = newInspection(type);
+    insp.dossierNumero = await nextDossierNumber();
+    insp.proprietaire = c && c.type !== 'agence' ? (c.nom || '') : (p ? p.nom : '');
+    if (c && c.type === 'agence') {
+      const ms = await Store.getMandataires();
+      let m = ms.find(x => norm(x.agence) === norm(c.nom) || (c.email && norm(x.email) === norm(c.email)));
+      if (!m) {
+        const ct = c.contact && typeof c.contact === 'object' ? [c.contact.prenom, c.contact.nom].filter(Boolean).join(' ') : (c.contact || '');
+        m = { id: uid(), nom: ct, agence: c.nom || '', telephone: c.tel || '', email: c.email || '', adresse: typeof c.adresse === 'string' ? [c.adresse, [c.cp, c.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ') : '' };
+        ms.push(m); await Store.saveMandataires(ms); MANDATAIRES_CACHE = ms;
+      }
+      insp.mandataire = { id: m.id, nom: m.nom, agence: m.agence, telephone: m.telephone, email: m.email, adresse: m.adresse };
+    }
+    insp.bienAdresse = [o.adresse, o.etagePorte, [o.cp, o.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+    insp.bienMeuble = /meubl/i.test(o.meuble || (l && l.meuble) || '');
+    const typeLot = (l && l.type) || '';
+    insp.bienType = /maison/i.test(typeLot) || /^m\d/.test(o.bien || '') ? 'Maison' : /studio/i.test(typeLot) ? 'Studio' : 'Appartement';
+    const nb = typeLot.match(/[tf]\s?(\d+)/i);
+    insp.bienPieces = nb ? nb[1] : (/studio/i.test(typeLot) ? '1' : '');
+    const sec = o.mission === 'forfait' && type === 'entree' ? 'l2' : 'l1';
+    insp.entrantNom = o[sec + 'nom'] || '';
+    if (type === 'entree') insp.entrantEmail = o[sec + 'email'] || '';
+    else { insp.sortantTelephone = o[sec + 'tel'] || ''; insp.sortantEmail = o[sec + 'email'] || ''; }
+    if (o.rdv) insp.dateEdl = String(o.rdv).slice(0, 10);
+    if (o.technicien) insp.technicien = o.technicien;
+    insp.interloc = { edlId: o.id, num: o.num || '', clientId: o.clientId, mission: o.mission, client: (c && c.nom) || o.par || '' };
+    insp.dossier = computeDossierLabel(insp);
+    CURRENT = insp;
+    await Store.saveInspection(insp);
+    renderEditor('general');
+  }
+
+  /* --- Envoi du rapport PDF dans Inter'Loc --- */
+  async function envoyer(insp, blob, nom) {
+    const k = await init(), f = k.f;
+    const e = await etat();
+    if (!e.connecte || !e.admin) throw new Error("Connectez-vous à Inter'Loc depuis l'accueil de l'appli, puis régénérez le PDF.");
+    const o = await lire('edl', insp.interloc.edlId);
+    if (!o) throw new Error("La commande n'existe plus dans Inter'Loc.");
+    const c = await lire('clients', o.clientId);
+    const path = 'u/' + o.clientId + '/edl/' + o.id + '/' + insp.type + '-' + Date.now() + '.pdf';
+    const r = k.s.ref(k.st, path);
+    await k.s.uploadBytes(r, blob, { contentType: 'application/pdf' });
+    const url = await k.s.getDownloadURL(r);
+    const le = new Date().toISOString();
+    const info = { nom: nom, taille: blob.size, le: le, data: url, type: insp.type };
+    const maj = { vuPar: { admin: le } };
+    let nouveau = true;
+    if (!o.rapport || o.rapport.type === insp.type || o.mission !== 'forfait') {
+      nouveau = !o.rapport;
+      maj.rapport = info;
+    } else {
+      const supp = (o.rapportsSupp || []).filter(x => x.type !== insp.type);
+      nouveau = supp.length === (o.rapportsSupp || []).length;
+      maj.rapportsSupp = supp.concat([info]);
+    }
+    const types = [maj.rapport || o.rapport, ...(maj.rapportsSupp || o.rapportsSupp || [])].filter(Boolean).map(x => x.type);
+    const fini = o.mission !== 'forfait' || (types.includes('sortie') && types.includes('entree'));
+    const statut = ACTIFS.includes(o.statut) && fini ? 'Réalisé' : o.statut;
+    maj.statut = statut;
+    if (!o.technicien && insp.technicien) maj.technicien = insp.technicien;
+    maj.historique = f.arrayUnion({ date: le, statut: statut, auteur: 'AG LOC', commentaire: "Rapport PDF envoyé depuis l'appli État des lieux : " + nom });
+    if (nouveau && c && c.email) maj.mails = f.arrayUnion({ a: c.email, le: le, objet: 'Votre état des lieux ' + (o.num || '') + ' est disponible' });
+    await f.updateDoc(f.doc(k.db, 'edl', o.id), maj);
+    insp.interloc.envoyeLe = le;
+    await Store.saveInspection(insp);
+    return { client: (c && c.nom) || '', email: (c && c.email) || '', nouveau: nouveau };
+  }
+
+  function dialogue(titre, texte, boutons) {
+    return new Promise(res => {
+      const ov = el('div', { class: 'il-overlay' });
+      const d = el('div', { class: 'il-dialog' });
+      d.appendChild(el('h3', { text: titre }));
+      d.appendChild(el('p', { text: texte }));
+      const row = el('div', { class: 'il-actions' });
+      boutons.forEach(([lib, cls, val]) => row.appendChild(el('button', { class: 'btn ' + cls, text: lib, on: { click: () => { ov.remove(); res(val); } } })));
+      d.appendChild(row); ov.appendChild(d); document.body.appendChild(ov);
+    });
+  }
+  async function proposerEnvoi(insp, blob, nom) {
+    const deja = insp.interloc.envoyeLe;
+    const ok = await dialogue("Envoyer le rapport au client ?",
+      (deja ? "Un rapport a déjà été envoyé pour cette commande le " + fmtDateTime(deja) + ". Le nouveau PDF le remplacera dans Inter'Loc. " : "") +
+      "Le PDF sera rangé dans la commande " + (insp.interloc.num || '') + " d'Inter'Loc (" + (insp.interloc.client || 'client') + "), la commande passera en « Réalisé »" + (insp.interloc.mission === 'forfait' ? " une fois les deux états des lieux (sortie et entrée) envoyés" : "") + (deja ? "." : " ; le client recevra le rapport par e-mail."),
+      [["Plus tard", "btn-ghost", false], ["Envoyer à Inter'Loc", "btn-primary", true]]);
+    if (!ok) return;
+    try {
+      const r = await envoyer(insp, blob, nom);
+      await dialogue("Rapport envoyé", r.nouveau && r.email ? "Le rapport est dans Inter'Loc et part par e-mail à " + r.client + " (" + r.email + ")." : "Le rapport est enregistré dans Inter'Loc.", [["OK", "btn-primary", true]]);
+    } catch (e) {
+      await dialogue("Envoi impossible", (e && e.message) || String(e), [["OK", "btn-primary", true]]);
+    }
+  }
+
+  /* --- Section de l'accueil --- */
+  async function renderSection(box, index) {
+    box.innerHTML = '';
+    const head = el('div', { class: 'il-head' });
+    head.appendChild(el('h2', { class: 'section-title', text: "Commandes Inter'Loc à réaliser" }));
+    box.appendChild(head);
+    const body = el('div');
+    body.appendChild(el('p', { class: 'empty-sm', text: 'Chargement…' }));
+    box.appendChild(body);
+    let e;
+    try { e = await etat(); }
+    catch (err) { body.innerHTML = ''; body.appendChild(el('p', { class: 'empty-sm', text: err.message + ' ' })).appendChild(el('button', { class: 'btn btn-ghost btn-sm', text: 'Réessayer', on: { click: () => renderSection(box, index) } })); return; }
+    body.innerHTML = '';
+    if (!e.connecte || !e.admin) {
+      const form = el('form', { class: 'box il-login' });
+      const fld = (lab, type, ac) => { const w = el('div'); w.appendChild(el('label', { text: lab })); const i = el('input', { attrs: { type: type, autocomplete: ac, required: 'required' } }); w.appendChild(i); form.appendChild(w); return i; };
+      const im = fld('E-mail administrateur Inter\'Loc', 'email', 'username');
+      const ip = fld('Mot de passe', 'password', 'current-password');
+      const b = el('button', { class: 'btn btn-primary', text: 'Se connecter', attrs: { type: 'submit' } });
+      form.appendChild(b);
+      const err = el('div', { class: 'il-err' });
+      form.addEventListener('submit', async ev => {
+        ev.preventDefault(); b.disabled = true; b.textContent = 'Connexion…'; err.textContent = '';
+        try { await connexion(im.value.trim(), ip.value); renderSection(box, index); }
+        catch (x) { err.textContent = x.message; b.disabled = false; b.textContent = 'Se connecter'; }
+      });
+      body.appendChild(el('p', { class: 'empty-sm', text: "Connectez-vous une fois avec votre compte administrateur Inter'Loc pour voir ici les états des lieux commandés par les clients." }));
+      body.appendChild(form); body.appendChild(err);
+      return;
+    }
+    head.appendChild(el('div', { class: 'il-user', children: [document.createTextNode(e.email), el('button', { text: 'Actualiser', on: { click: () => renderSection(box, index) } }), el('button', { text: 'Se déconnecter', on: { click: async () => { await deconnexion(); renderSection(box, index); } } })] }));
+    let list;
+    try { list = await commandes(); }
+    catch (x) { body.appendChild(el('p', { class: 'il-err', text: "Lecture des commandes impossible : " + (x.code || x.message) })); return; }
+    if (!list.length) { body.appendChild(el('p', { class: 'empty-sm', text: "Aucune commande en attente dans Inter'Loc." })); return; }
+    const grid = el('div', { class: 'card-grid' });
+    list.forEach(o => {
+      const card = el('div', { class: 'insp-card il-card' });
+      card.appendChild(el('div', { class: 'insp-card-tag il-tag', text: MISSIONS[o.mission] || 'État des lieux' }));
+      card.appendChild(el('div', { class: 'insp-card-title', text: (o.num ? o.num + ' · ' : '') + (o.par || '') }));
+      card.appendChild(el('div', { class: 'insp-card-sub', text: [o.adresse, o.etagePorte, [o.cp, o.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ') }));
+      const info = (lab, val) => { if (val) card.appendChild(el('div', { class: 'il-info', html: '<b>' + lab + ' :</b> ' + val })); };
+      const esc = v => String(v || '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+      const tel = t => t ? ' · <a href="tel:' + esc(String(t).replace(/\s/g, '')) + '">' + esc(t) + '</a>' : '';
+      info('Rendez-vous', o.rdv ? esc(fmtDateTime(o.rdv)) : '<span style="color:var(--amber)">à fixer</span>');
+      if (o.finPreavis) info('Fin de préavis', esc(fmtDate(o.finPreavis)));
+      if (o.dateEntree) info('Entrée prévue', esc(fmtDate(o.dateEntree)));
+      info(o.mission === 'forfait' ? 'Sortant' : 'Locataire', o.l1nom ? esc(o.l1nom) + tel(o.l1tel) : '');
+      if (o.mission === 'forfait') info('Entrant', o.l2nom ? esc(o.l2nom) + tel(o.l2tel) : '');
+      const notes = [o.meuble ? (/meubl/i.test(o.meuble) ? 'Meublé' : 'Vide') : '', o.surface ? o.surface + ' m²' : '', o.acces, o.cles ? 'Clés : ' + ({ client: "remises par l'agence / le propriétaire", place: 'sur place (locataire présent)', boite: 'boîte à clés', autre: 'voir remarque' }[o.cles] || o.cles) : '', o.remarques].filter(Boolean).join(' · ');
+      if (notes) card.appendChild(el('div', { class: 'il-note', text: notes }));
+      const row = el('div', { class: 'insp-card-actions' });
+      const types = o.mission === 'forfait' ? ['sortie', 'entree'] : [o.mission === 'entree' ? 'entree' : 'sortie'];
+      types.forEach(t => {
+        const lie = (index || []).find(x => x.interlocEdlId === o.id && x.type === t);
+        const lib = t === 'entree' ? "d'entrée" : 'de sortie';
+        if (lie) row.appendChild(el('button', { class: 'btn btn-outline btn-sm', text: "Ouvrir l'EDL " + lib, on: { click: () => openInspection(lie.id) } }));
+        else row.appendChild(el('button', { class: 'btn btn-primary btn-sm', text: "Créer l'EDL " + lib, on: { click: async ev => { ev.target.disabled = true; ev.target.textContent = 'Préparation…'; try { await creerDepuis(o, t); } catch (x) { alert("Impossible de préparer l'état des lieux : " + (x.message || x)); ev.target.disabled = false; ev.target.textContent = "Créer l'EDL " + lib; } } } }));
+      });
+      card.appendChild(row);
+      grid.appendChild(card);
+    });
+    body.appendChild(grid);
+  }
+
+  return { renderSection, proposerEnvoi, creerDepuis, envoyer, etat };
+})();
+</script>
 <script>
 /* ==========================================================================
    AGLOC — Etat des lieux — logique applicative
@@ -754,7 +1017,9 @@ const Store = {
       id: insp.id, type: insp.type, dossier: insp.dossier,
       adresse: insp.bienAdresse, updatedAt: insp.updatedAt,
       agence: (insp.mandataire && insp.mandataire.agence) || '',
-      complete: isInspectionComplete(insp)
+      complete: isInspectionComplete(insp),
+      interlocEdlId: (insp.interloc && insp.interloc.edlId) || null,
+      interlocEnvoye: !!(insp.interloc && insp.interloc.envoyeLe)
     };
     if (i >= 0) idx[i] = entry; else idx.unshift(entry);
     await this.setIndex(idx);
@@ -1071,6 +1336,10 @@ async function renderHome() {
   }));
   wrap.appendChild(actions);
 
+  const ilBox = el('div', { class: 'il-zone' });
+  wrap.appendChild(ilBox);
+  InterLoc.renderSection(ilBox, list);
+
   wrap.appendChild(el('h2', { class: 'section-title', text: 'États des lieux en cours' }));
 
   const inProgress = list.filter(e => !e.complete);
@@ -1158,6 +1427,7 @@ function buildInspectionCard(entry) {
   const typeLabel = entry.type === 'entree' ? 'Entrée' : 'Sortie';
   const card = el('div', { class: 'insp-card' });
   card.appendChild(el('div', { class: 'insp-card-tag tag-' + entry.type, text: typeLabel }));
+  if (entry.interlocEdlId) card.appendChild(el('span', { class: 'il-badge' + (entry.interlocEnvoye ? ' ok' : ''), text: entry.interlocEnvoye ? 'Inter\'Loc · rapport envoyé' : 'Commande Inter\'Loc' }));
   card.appendChild(el('div', { class: 'insp-card-title', text: entry.dossier || 'Sans nom de dossier' }));
   card.appendChild(el('div', { class: 'insp-card-sub', text: entry.adresse || 'Adresse non renseignée' }));
   card.appendChild(el('div', { class: 'insp-card-date', text: 'Modifié le ' + fmtDate(entry.updatedAt) }));
@@ -3787,6 +4057,10 @@ async function generatePDF(insp) {
   await Store.saveInspection(insp);
 
   doc.save(filename);
+
+  if (insp.interloc && insp.interloc.edlId) {
+    await InterLoc.proposerEnvoi(insp, doc.output('blob'), filename);
+  }
 }
 </script>
 <script>
