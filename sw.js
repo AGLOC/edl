@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aglo-edl-v6';
+const CACHE_NAME = 'aglo-edl-v7';
 const ASSETS = [
   './',
   './index.html',

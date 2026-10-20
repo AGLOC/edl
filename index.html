@@ -178,6 +178,12 @@ button, input, select, textarea { font-family: inherit; }
 .il-dialog p { font-size: 14px; color: var(--subtle); margin: 0 0 16px; line-height: 1.5; }
 .il-dialog .il-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 
+/* ---------- Étapes : Précédent / Suivant ---------- */
+.step-nav { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 8px 0 24px; }
+.step-nav .btn { min-height: 46px; padding: 12px 20px; font-size: 15px; }
+.step-next small { font-weight: 500; opacity: .75; margin-left: 4px; }
+@media (max-width: 520px) { .step-next small { display: none; } }
+
 /* ---------- Boxes / sections ---------- */
 .box {
   background: #fff; border: 1px solid var(--border); border-radius: var(--radius);
@@ -1836,6 +1842,17 @@ async function renderEditor(activeTab) {
   else if (activeTab === 'chauffage') buildChauffageTab(content);
   else if (activeTab === 'pieces') buildPiecesTab(content);
   else if (activeTab === 'recap') buildRecapTab(content);
+  content.appendChild(buildStepNav(TABS, activeTab, renderEditor));
+}
+
+/* Boutons « Précédent / Suivant » en bas de chaque étape */
+function buildStepNav(tabs, activeTab, go) {
+  const i = tabs.findIndex(t => t.key === activeTab);
+  const nav = el('div', { class: 'step-nav' });
+  const prev = tabs[i - 1], next = tabs[i + 1];
+  nav.appendChild(prev ? el('button', { class: 'btn btn-outline', text: '← ' + prev.label, on: { click: () => { go(prev.key); window.scrollTo(0, 0); } } }) : el('span'));
+  if (next) nav.appendChild(el('button', { class: 'btn btn-primary step-next', html: 'Suivant <small>' + next.label + '</small> →', on: { click: () => { go(next.key); window.scrollTo(0, 0); } } }));
+  return nav;
 }
 
 function field(label, value, onInput, opts) {
@@ -3551,6 +3568,7 @@ async function renderOnbEditor(activeTab) {
     notes: buildOnbNotesTab,
   };
   (fnMap[activeTab] || buildOnbProprioTab)(content);
+  content.appendChild(buildStepNav(TABS_ONB, fnMap[activeTab] ? activeTab : 'proprio', renderOnbEditor));
 }
 
 /* ---- démarrage ---- */
