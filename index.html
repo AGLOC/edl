@@ -463,6 +463,7 @@ const InterLoc = (() => {
     if (c) appliquerClient(insp, { id: c.id, type: c.type === 'agence' ? 'agence' : 'proprietaire', nom: c.nom || '', contact: nomContact(c), telephone: c.tel || '', email: c.email || '',
       adresse: typeof c.adresse === 'string' ? [c.adresse, [c.cp, c.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ') : '' });
     if (p) { insp.proprietaire = p.nom || ''; insp.proprioInterlocId = p.id; }
+    if (o.lotId) insp.lotInterlocId = o.lotId;
     insp.bienAdresse = [o.adresse, o.etagePorte, [o.cp, o.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ');
     insp.bienMeuble = /meubl/i.test(o.meuble || (l && l.meuble) || '');
     const typeLot = (l && l.type) || '';
@@ -628,20 +629,50 @@ const InterLoc = (() => {
   async function rafraichirAnnuaire() {
     const k = await distant(); if (!k) return annuaire;
     const f = k.f, auj = new Date().toISOString().slice(0, 10);
-    const [cs, ps] = await Promise.all([f.getDocs(f.collection(k.db, 'clients')), f.getDocs(f.collection(k.db, 'proprietaires'))]);
-    const clients = [], proprios = [];
+    const [cs, ps, ls] = await Promise.all([f.getDocs(f.collection(k.db, 'clients')), f.getDocs(f.collection(k.db, 'proprietaires')), f.getDocs(f.collection(k.db, 'lots'))]);
+    const clients = [], proprios = [], lots = [];
+    const sansTiret = v => v && v !== '—' ? String(v) : '';
+    ls.forEach(d => { const x = d.data(); if (x.archive) return;
+      lots.push({ id: d.id, clientId: x.clientId, proprioId: x.proprioId || null, adresse: x.adresse || '', cp: x.cp || '', ville: x.ville || '',
+        etage: sansTiret(x.etage), porte: sansTiret(x.porte), type: x.type || '', surface: x.surface || '', meuble: x.meuble || '', ref: sansTiret(x.ref) }); });
+    lots.sort((a, b) => (a.ville + a.adresse).localeCompare(b.ville + b.adresse, 'fr'));
     cs.forEach(d => { const c = d.data();
       if (c.archive || (c.resiliation && c.resiliation.finLe && c.resiliation.finLe <= auj) || (c.inscription && c.inscription.statut === 'rejete')) return;
       clients.push({ id: d.id, type: c.type === 'agence' ? 'agence' : 'proprietaire', nom: c.nom || '', contact: nomContact(c), telephone: c.tel || '', email: c.email || '',
         adresse: typeof c.adresse === 'string' ? [c.adresse, [c.cp, c.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ') : '' }); });
     ps.forEach(d => { const x = d.data(); if (x.archive) return; proprios.push({ id: d.id, clientId: x.clientId, nom: x.nom || '', telephone: x.tel || '', email: x.email || '' }); });
     clients.sort((a, b) => a.nom.localeCompare(b.nom, 'fr')); proprios.sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
-    annuaire = { clients, proprios, le: new Date().toISOString() };
+    annuaire = { clients, proprios, lots, le: new Date().toISOString() };
     try { localStorage.setItem(ANN_KEY, JSON.stringify(annuaire)); } catch (e) {}
     return annuaire;
   }
   const clientsIL = () => annuaire.clients || [];
   const proprietairesIL = clientId => (annuaire.proprios || []).filter(p => p.clientId === clientId);
+  const logementsIL = (clientId, proprioId) => (annuaire.lots || []).filter(l => l.clientId === clientId && (!proprioId || l.proprioId === proprioId));
+  const libelleLot = l => [l.adresse, [l.etage && (/^(rdc|rez)/i.test(l.etage) ? l.etage : 'ét. ' + l.etage), l.porte && 'porte ' + l.porte].filter(Boolean).join(', '), [l.cp, l.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  /* Choix d'un logement Inter'Loc : adresse, type, pièces et meublé remplis */
+  function appliquerLogement(insp, l) {
+    insp.lotInterlocId = l ? l.id : null;
+    if (!l) return;
+    insp.bienAdresse = libelleLot(l);
+    insp.bienType = /maison/i.test(l.type) ? 'Maison' : /studio/i.test(l.type) ? 'Studio' : /duplex/i.test(l.type) ? 'Duplex' : /local|bureau/i.test(l.type) ? 'Local professionnel / Bureau' : /parking|garage/i.test(l.type) ? 'Parking / Garage' : 'Appartement';
+    const nb = String(l.type).match(/[tf]\s?(\d+)/i);
+    const n = nb ? nb[1] : (/studio/i.test(l.type) ? '1' : '');
+    if (n) {
+      insp.bienPieces = n;
+      if (!(insp.pieces || []).length && typeof generateDefaultRooms === 'function') insp.pieces = generateDefaultRooms(parseInt(n, 10));
+    }
+    const meuble = /meubl/i.test(l.meuble);
+    if (meuble && !insp.bienMeuble) (insp.pieces || []).forEach(room => {
+      const deja = new Set(room.lignes.map(x => x.critere));
+      meubleCriteresForRoom(room.nom).forEach(c => { if (!deja.has(c)) room.lignes.push(newLigne(c)); });
+    });
+    insp.bienMeuble = meuble;
+    if (l.proprioId && insp.clientInterloc && insp.clientInterloc.type === 'agence') {
+      const p = proprietairesIL(l.clientId).find(x => x.id === l.proprioId);
+      if (p) { insp.proprioInterlocId = p.id; insp.proprietaire = p.nom; }
+    }
+  }
   /* Choix d'un client Inter'Loc dans un état des lieux */
   function appliquerClient(insp, c) {
     insp.clientInterloc = c ? { id: c.id, type: c.type, nom: c.nom } : null;
@@ -649,8 +680,10 @@ const InterLoc = (() => {
     if (c.type === 'agence') {
       insp.mandataire = { id: 'il:' + c.id, nom: c.contact, agence: c.nom, telephone: c.telephone, email: c.email, adresse: c.adresse };
       if (insp.proprioInterlocId && !proprietairesIL(c.id).some(p => p.id === insp.proprioInterlocId)) { insp.proprioInterlocId = null; insp.proprietaire = ''; }
+      if (insp.lotInterlocId && !logementsIL(c.id).some(l => l.id === insp.lotInterlocId)) insp.lotInterlocId = null;
     } else {
       insp.mandataire = null; insp.proprioInterlocId = null; insp.proprietaire = c.nom;
+      if (insp.lotInterlocId && !logementsIL(c.id).some(l => l.id === insp.lotInterlocId)) insp.lotInterlocId = null;
     }
   }
 
@@ -738,7 +771,7 @@ const InterLoc = (() => {
     return n;
   }
 
-  return { renderSection, proposerEnvoi, creerDepuis, envoyer, etat, kv, fusion, migrer, distant, rafraichirAnnuaire, clientsIL, proprietairesIL, appliquerClient };
+  return { renderSection, proposerEnvoi, creerDepuis, envoyer, etat, kv, fusion, migrer, distant, rafraichirAnnuaire, clientsIL, proprietairesIL, appliquerClient, logementsIL, libelleLot, appliquerLogement };
 })();
 </script>
 <script>
@@ -1714,6 +1747,7 @@ async function duplicateInspection(id) {
   copy.proprietaire = src.proprietaire;
   copy.clientInterloc = src.clientInterloc ? { ...src.clientInterloc } : null;
   copy.proprioInterlocId = src.proprioInterlocId || null;
+  copy.lotInterlocId = src.lotInterlocId || null;
   copy.dateEdl = new Date().toISOString().slice(0, 10);
   copy.bienType = src.bienType;
   copy.bienMeuble = src.bienMeuble;
@@ -2022,6 +2056,29 @@ function buildMandataireSelector() {
   return wrap;
 }
 
+/* Logement : les logements du client Inter'Loc (et du propriétaire choisi), ou un autre logement saisi à la main */
+function buildLogementSelector() {
+  const ci = CURRENT.clientInterloc;
+  if (!ci) return null;
+  const lots = InterLoc.logementsIL(ci.id, ci.type === 'agence' ? CURRENT.proprioInterlocId : null);
+  const wrap = el('div', { class: 'field field-wide' });
+  wrap.appendChild(el('label', { text: "Logement (parc Inter'Loc de " + ci.nom + (ci.type === 'agence' && CURRENT.proprioInterlocId ? ' · ' + CURRENT.proprietaire : '') + ')' }));
+  const select = el('select');
+  const vide = el('option', { text: lots.length ? '— Sélectionner le logement —' : "— Aucun logement enregistré dans Inter'Loc —" }); vide.value = ''; select.appendChild(vide);
+  lots.forEach(l => { const o = el('option', { text: InterLoc.libelleLot(l) + (l.type ? ' · ' + l.type : '') + (l.ref ? ' · réf. ' + l.ref : '') }); o.value = l.id; select.appendChild(o); });
+  const autre = el('option', { text: "Autre logement (non enregistré dans Inter'Loc) : saisir l'adresse ci-dessous" }); autre.value = '__autre__'; select.appendChild(autre);
+  select.value = CURRENT.lotInterlocId && lots.some(l => l.id === CURRENT.lotInterlocId) ? CURRENT.lotInterlocId : (CURRENT.bienAdresse ? '__autre__' : '');
+  select.addEventListener('change', () => {
+    if (select.value === '__autre__' || !select.value) { CURRENT.lotInterlocId = null; markDirty(); renderEditor('general'); return; }
+    const l = lots.find(x => x.id === select.value);
+    InterLoc.appliquerLogement(CURRENT, l);
+    refreshDossierDisplay(); markDirty(); renderEditor('general');
+  });
+  wrap.appendChild(select);
+  wrap.appendChild(el('div', { class: 'field-hint', text: CURRENT.lotInterlocId ? "Adresse, type de bien, pièces et meublé repris d'Inter'Loc : vous pouvez les ajuster ci-dessous." : "Pour un logement qui n'est pas dans Inter'Loc, choisissez « Autre logement » et renseignez les champs ci-dessous." }));
+  return wrap;
+}
+
 /* Propriétaire : liste des propriétaires de l'agence cliente Inter'Loc, ou saisie libre */
 function buildProprietaireField() {
   const ci = CURRENT.clientInterloc;
@@ -2049,7 +2106,10 @@ function buildProprietaireField() {
   select.addEventListener('change', () => {
     if (select.value === '__autre__') { CURRENT.proprioInterlocId = null; CURRENT.proprietaire = input.value; input.style.display = ''; input.focus(); }
     else { const p = proprios.find(x => x.id === select.value); CURRENT.proprioInterlocId = p ? p.id : null; CURRENT.proprietaire = p ? p.nom : ''; input.style.display = 'none'; }
+    const lot = CURRENT.lotInterlocId && InterLoc.logementsIL(ci.id).find(l => l.id === CURRENT.lotInterlocId);
+    if (lot && lot.proprioId !== CURRENT.proprioInterlocId) CURRENT.lotInterlocId = null;
     refreshDossierDisplay(); markDirty();
+    if (select.value !== '__autre__') renderEditor('general');
   });
   return wrap;
 }
@@ -2247,6 +2307,8 @@ function buildGeneralTab(content) {
   content.appendChild(sectionBox('Informations générales', grid));
 
   const gridBien = el('div', { class: 'form-grid' });
+  const selLot = buildLogementSelector();
+  if (selLot) gridBien.appendChild(selLot);
   gridBien.appendChild(buildBienTypeSelector());
   gridBien.appendChild(buildBienPiecesField());
   gridBien.appendChild(field('Adresse du bien', CURRENT.bienAdresse, v => CURRENT.bienAdresse = v, { wide: true }));
