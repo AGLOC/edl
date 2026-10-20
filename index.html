@@ -167,6 +167,9 @@ button, input, select, textarea { font-family: inherit; }
 .il-card .il-info a { color: var(--blue); }
 .il-card .il-note { font-size: 12px; color: var(--subtle); background: var(--lightblue); border-radius: 6px; padding: 6px 8px; margin: 6px 0 10px; }
 .il-tag { background: var(--navy); }
+.il-sync { font-size: 12px; color: var(--green); margin: -6px 0 12px; }
+.il-sync::before { content: '● '; }
+.il-sync.attente { color: var(--amber); }
 .il-badge { display: inline-block; margin-left: 6px; font-size: 10.5px; font-weight: 600; padding: 3px 8px; border-radius: 20px; background: var(--lightgold); color: var(--gold-dark); vertical-align: top; }
 .il-badge.ok { background: #e3f3e9; color: var(--green); }
 .il-overlay { position: fixed; inset: 0; background: rgba(19,30,48,.55); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 16px; }
@@ -573,13 +576,22 @@ const InterLoc = (() => {
       const err = el('div', { class: 'il-err' });
       form.addEventListener('submit', async ev => {
         ev.preventDefault(); b.disabled = true; b.textContent = 'Connexion…'; err.textContent = '';
-        try { await connexion(im.value.trim(), ip.value); renderSection(box, index); }
+        try { await connexion(im.value.trim(), ip.value); if (!CURRENT) renderHome(); else renderSection(box, index); }
         catch (x) { err.textContent = x.message; b.disabled = false; b.textContent = 'Se connecter'; }
       });
-      body.appendChild(el('p', { class: 'empty-sm', text: "Connectez-vous une fois avec votre compte administrateur Inter'Loc pour voir ici les états des lieux commandés par les clients." }));
+      body.appendChild(el('p', { class: 'empty-sm', text: "Connectez-vous une fois avec votre compte administrateur Inter'Loc : vos dossiers d'états des lieux y seront sauvegardés et synchronisés entre vos appareils, et vous verrez ici les états des lieux commandés par les clients. Sans connexion, les dossiers restent uniquement sur cet appareil." }));
       body.appendChild(form); body.appendChild(err);
       return;
     }
+    const sync = el('div', { class: 'il-sync', attrs: { id: 'il-sync' } });
+    box.insertBefore(sync, body);
+    if (window.storage.majEtat) window.storage.majEtat();
+    if (window.storage.migrer && !localStorage.getItem('il-edl-migre-v1')) {
+      sync.textContent = 'Envoi des dossiers de cet appareil vers Inter\'Loc…';
+      window.storage.migrer((n, t) => { sync.textContent = 'Envoi des dossiers de cet appareil vers Inter\'Loc… ' + n + '/' + t; })
+        .then(n => { try { localStorage.setItem('il-edl-migre-v1', new Date().toISOString()); } catch (x) {} window.storage.majEtat(); if (!CURRENT && n) renderHome(); })
+        .catch(x => { sync.textContent = 'Envoi interrompu (' + (x.message || x) + ') : il reprendra à la prochaine ouverture.'; sync.className = 'il-sync attente'; });
+    } else if (window.storage.vider) window.storage.vider();
     head.appendChild(el('div', { class: 'il-user', children: [document.createTextNode(e.email), el('button', { text: 'Actualiser', on: { click: () => renderSection(box, index) } }), el('button', { text: 'Se déconnecter', on: { click: async () => { await deconnexion(); renderSection(box, index); } } })] }));
     let list;
     try { list = await commandes(); }
@@ -615,7 +627,91 @@ const InterLoc = (() => {
     body.appendChild(grid);
   }
 
-  return { renderSection, proposerEnvoi, creerDepuis, envoyer, etat };
+  /* --- Dossiers de l'appli enregistrés dans Inter'Loc (collection « edlApp », réservée aux administrateurs) --- */
+  const delai = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('délai dépassé')), ms))]);
+  let adminUid = null;
+  async function distant() {
+    try {
+      const k = await delai(init(), 8000);
+      const u = k.auth.currentUser;
+      if (!u) { adminUid = null; return null; }
+      if (adminUid !== u.uid) {
+        const t = await delai(u.getIdTokenResult(), 8000);
+        if (t.claims.role !== 'admin') return null;
+        adminUid = u.uid;
+      }
+      return k;
+    } catch (e) { return null; }
+  }
+  const HORS = () => new Error("Inter'Loc non joignable");
+  const kv = {
+    async get(key) {
+      const k = await distant(); if (!k) throw HORS();
+      const d = await delai(k.f.getDoc(k.f.doc(k.db, 'edlApp', key)), 8000);
+      return d.exists() ? d.data().value : null;
+    },
+    async set(key, value) {
+      const k = await distant(); if (!k) throw HORS();
+      await delai(k.f.setDoc(k.f.doc(k.db, 'edlApp', key), { value: value, updatedAt: Date.now() }), 20000);
+    },
+    async del(key) {
+      const k = await distant(); if (!k) throw HORS();
+      await delai(k.f.deleteDoc(k.f.doc(k.db, 'edlApp', key)), 15000);
+    }
+  };
+  /* Fusion de deux versions d'une même clé (appareil / Inter'Loc) : on ne perd rien */
+  function fusion(key, a, b) {
+    if (a == null) return b;
+    if (b == null || a === b) return a;
+    if (key.startsWith('photo:')) return a;
+    if (/:counter:/.test(key)) return String(Math.max(parseInt(a, 10) || 0, parseInt(b, 10) || 0));
+    let x, y;
+    try { x = JSON.parse(a); y = JSON.parse(b); } catch (e) { return a; }
+    if (Array.isArray(x) && Array.isArray(y)) {
+      const out = [], vus = new Map();
+      [...x, ...y].forEach(it => {
+        const id = it && typeof it === 'object' && it.id ? it.id : JSON.stringify(it);
+        if (!vus.has(id)) { vus.set(id, out.length); out.push(it); return; }
+        const i = vus.get(id), prec = out[i];
+        if (it && prec && typeof it === 'object' && String(it.updatedAt || '') > String(prec.updatedAt || '')) out[i] = it;
+      });
+      if (/:index$/.test(key)) {
+        const sup = window.__ilSupprimes || new Set();
+        for (let i = out.length - 1; i >= 0; i--) if (out[i] && sup.has(out[i].id)) out.splice(i, 1);
+        out.sort((p, q) => String(q.updatedAt || '').localeCompare(String(p.updatedAt || '')));
+      }
+      return JSON.stringify(out);
+    }
+    if (x && y && typeof x === 'object' && typeof y === 'object') return String(y.updatedAt || '') > String(x.updatedAt || '') ? b : a;
+    return a;
+  }
+  /* Première connexion sur un appareil : les dossiers déjà présents (sur la tablette, ou dans l'ancienne base) partent dans Inter'Loc */
+  async function migrer(local, ancien, progres) {
+    if (ancien) {
+      try {
+        const ks = (await delai(ancien.list(''), 20000)).keys || [];
+        for (const key of ks) {
+          const r = await delai(ancien.get(key), 15000).catch(() => null);
+          if (!r) continue;
+          const l = await local.get(key);
+          await local.set(key, fusion(key, l ? l.value : null, r.value));
+        }
+      } catch (e) { /* ancienne base indisponible : rien à reprendre */ }
+    }
+    const ks = ((await local.list('')).keys || []).map(String);
+    let n = 0;
+    for (const key of ks) {
+      const l = await local.get(key); if (!l) continue;
+      const r = key.startsWith('photo:') ? null : await kv.get(key);
+      const v = fusion(key, l.value, r);
+      if (v !== r) await kv.set(key, v);
+      if (v !== l.value) await local.set(key, v);
+      n++; if (progres) progres(n, ks.length);
+    }
+    return n;
+  }
+
+  return { renderSection, proposerEnvoi, creerDepuis, envoyer, etat, kv, fusion, migrer, distant };
 })();
 </script>
 <script>
@@ -933,9 +1029,81 @@ function compressImage(file) {
     };
   }
 
-  window.storage = FIREBASE_CONFIG.apiKey
-    ? buildFirebaseStorage(FIREBASE_CONFIG)
-    : buildIndexedDBStorage();
+  /* ---- Stockage utilisé : une copie sur l'appareil (fonctionne sans réseau) + Inter'Loc (sauvegarde et
+     synchronisation entre appareils, après connexion avec un compte administrateur Inter'Loc).
+     Les modifications faites hors connexion sont gardées en attente et envoyées dès que possible. ---- */
+  function buildHybridStorage(local) {
+    const PKEY = 'il-edl-attente';
+    const attente = () => { try { return JSON.parse(localStorage.getItem(PKEY) || '[]'); } catch (e) { return []; } };
+    const setAttente = l => { try { localStorage.setItem(PKEY, JSON.stringify(Array.from(new Set(l)))); } catch (e) {} majEtat(); };
+    let vidage = null;
+    function majEtat() {
+      const n = attente().length, z = document.getElementById('il-sync');
+      if (z) { z.textContent = n ? n + ' modification' + (n > 1 ? 's' : '') + ' en attente d\'envoi' : 'Dossiers sauvegardés dans Inter\'Loc'; z.className = 'il-sync' + (n ? ' attente' : ''); }
+    }
+    function vider() {
+      if (vidage) return vidage;
+      vidage = (async () => {
+        for (const key of attente()) {
+          try {
+            const r = await local.get(key);
+            if (!r) await InterLoc.kv.del(key);
+            else if (/:index$|:list$|:counter:|^meta:/.test(key)) {
+              const v = InterLoc.fusion(key, r.value, await InterLoc.kv.get(key));
+              await InterLoc.kv.set(key, v);
+              if (v !== r.value) await local.set(key, v);
+            } else await InterLoc.kv.set(key, r.value);
+            setAttente(attente().filter(x => x !== key));
+          } catch (e) { break; }
+        }
+      })().finally(() => { vidage = null; majEtat(); });
+      return vidage;
+    }
+    /* Dossiers supprimés (sur un appareil ou un autre) : ils ne doivent pas réapparaître à la fusion des listes */
+    window.__ilSupprimes = new Set();
+    (async () => {
+      const l = await local.get('meta:supprimes').catch(() => null);
+      let ids = []; try { ids = JSON.parse((l && l.value) || '[]'); } catch (e) {}
+      try { const r = await InterLoc.kv.get('meta:supprimes'); if (r) ids = ids.concat(JSON.parse(r)); } catch (e) {}
+      ids.forEach(id => window.__ilSupprimes.add(id));
+    })();
+    window.addEventListener('online', () => vider());
+    setInterval(() => { if (attente().length) vider(); }, 60000);
+    return {
+      async get(key) {
+        const loc = await local.get(key);
+        if (loc && (String(key).startsWith('photo:') || attente().includes(key))) return loc;
+        try {
+          const v = await InterLoc.kv.get(key);
+          if (v === null || v === undefined) return loc;
+          if (!loc || loc.value !== v) await local.set(key, v);
+          return { key, value: v, shared: true };
+        } catch (e) { return loc; }
+      },
+      async set(key, value) { await local.set(key, value); setAttente(attente().concat([key])); vider(); return { key, value, shared: true }; },
+      async delete(key) {
+        await local.delete(key);
+        const m = String(key).match(/^(?:edl|onb):data:(.+)$/);
+        if (m) {
+          window.__ilSupprimes.add(m[1]);
+          await local.set('meta:supprimes', JSON.stringify(Array.from(window.__ilSupprimes)));
+          setAttente(attente().concat(['meta:supprimes']));
+        }
+        setAttente(attente().concat([key])); vider();
+        return { key, deleted: true, shared: true };
+      },
+      async list(prefix) { return local.list(prefix); },
+      vider, majEtat, attente,
+      async migrer(progres) {
+        const ancien = FIREBASE_CONFIG.apiKey ? buildFirebaseStorage(FIREBASE_CONFIG) : null;
+        const n = await InterLoc.migrer(local, ancien, progres);
+        await vider();
+        return n;
+      }
+    };
+  }
+
+  window.storage = buildHybridStorage(buildIndexedDBStorage());
 })();
 
 /* ---------- Numérotation automatique des dossiers ---------- */
