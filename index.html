@@ -673,6 +673,7 @@ const InterLoc = (() => {
       const deja = new Set(room.lignes.map(x => x.critere));
       meubleCriteresForRoom(room.nom).forEach(c => { if (!deja.has(c)) room.lignes.push(newLigne(c)); });
     });
+    if (!meuble && insp.bienMeuble) retirerMobilier(insp, false);
     insp.bienMeuble = meuble;
     if (l.proprioId && insp.clientInterloc && insp.clientInterloc.type === 'agence') {
       const p = proprietairesIL(l.clientId).find(x => x.id === l.proprioId);
@@ -847,6 +848,23 @@ const MEUBLE_EXTRAS = [
   'Décoration murale', 'Tapis', 'Rideaux (hors chambre)', 'Poubelle',
   'Fer à repasser', 'Sèche-cheveux', 'Télévision', 'Lave-linge', 'Sèche-linge',
 ];
+
+/* Logement repassé en « vide » : retire les lignes de mobilier des pièces.
+   Les lignes déjà renseignées (état, commentaire, photo, quantité) ne sont retirées qu'après confirmation. */
+function retirerMobilier(insp, demander) {
+  const remplie = l => !!(l.etat || (l.commentaire || '').trim() || (l.photos || []).length || l.quantite || l.substratModifie);
+  let vides = 0, pleines = 0;
+  (insp.pieces || []).forEach(room => {
+    const meubles = new Set(meubleCriteresForRoom(room.nom));
+    (room.lignes || []).forEach(l => { if (meubles.has(l.critere)) { if (remplie(l)) pleines++; else vides++; } });
+  });
+  const aussiPleines = pleines > 0 && demander && confirm(pleines + ' ligne(s) de mobilier sont déjà renseignées (état, commentaire ou photo). Les supprimer aussi ?');
+  (insp.pieces || []).forEach(room => {
+    const meubles = new Set(meubleCriteresForRoom(room.nom));
+    room.lignes = (room.lignes || []).filter(l => !meubles.has(l.critere) || (remplie(l) && !aussiPleines));
+  });
+  return vides + (aussiPleines ? pleines : 0);
+}
 
 function meubleCriteresForRoom(nom) {
   if (!nom) return [];
@@ -2302,6 +2320,10 @@ function buildMeubleToggle() {
         });
       });
       if (added > 0) alert(added + ' ligne(s) de mobilier ont été ajoutées dans les pièces existantes (onglet Pièces).');
+    } else {
+      const n = retirerMobilier(CURRENT, true);
+      markDirty();
+      if (n > 0) alert(n + ' ligne(s) de mobilier ont été retirées des pièces (onglet Pièces).');
     }
   });
   label.appendChild(cb);
